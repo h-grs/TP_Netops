@@ -1,0 +1,142 @@
+name: netops-g4
+
+topology:
+  kinds:
+    ceos:
+      image: ceos:4.36.1F
+    linux:
+      image: ghcr.io/srl-labs/network-multitool:latest
+
+  nodes:
+    # --- Paris ---
+    host-a-par:
+      kind: linux
+      labels:
+        graph-icon: host
+        graph-group: Paris
+        graph-level: 1
+        graph-pos-x: "0"
+        graph-pos-y: "150"
+    ce-a-par:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Paris
+        graph-level: 2
+        graph-pos-x: "150"
+        graph-pos-y: "150"
+    host-b-par:
+      kind: linux
+      labels:
+        graph-icon: host
+        graph-group: Paris
+        graph-level: 1
+        graph-pos-x: "0"
+        graph-pos-y: "350"
+    ce-b-par:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Paris
+        graph-level: 2
+        graph-pos-x: "150"
+        graph-pos-y: "350"
+    pe-par:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Paris
+        graph-level: 3
+        graph-pos-x: "350"
+        graph-pos-y: "250"
+
+    # --- Core ---
+    p1:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Core
+        graph-level: 4
+        graph-pos-x: "550"
+        graph-pos-y: "250"
+    p2:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Core
+        graph-level: 5
+        graph-pos-x: "750"
+        graph-pos-y: "250"
+
+    # --- Bordeaux ---
+    pe-bor:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Bordeaux
+        graph-level: 6
+        graph-pos-x: "950"
+        graph-pos-y: "150"
+    ce-b-bor:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Bordeaux
+        graph-level: 7
+        graph-pos-x: "1150"
+        graph-pos-y: "150"
+    host-b-bor:
+      kind: linux
+      labels:
+        graph-icon: host
+        graph-group: Bordeaux
+        graph-level: 8
+        graph-pos-x: "1300"
+        graph-pos-y: "150"
+
+    # --- Avignon ---
+    pe-avi:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Avignon
+        graph-level: 6
+        graph-pos-x: "950"
+        graph-pos-y: "400"
+    ce-a-avi:
+      kind: ceos
+      labels:
+        graph-icon: router
+        graph-group: Avignon
+        graph-level: 7
+        graph-pos-x: "1150"
+        graph-pos-y: "400"
+    host-a-avi:
+      kind: linux
+      labels:
+        graph-icon: host
+        graph-group: Avignon
+        graph-level: 8
+        graph-pos-x: "1300"
+        graph-pos-y: "400"
+
+  links:
+    # Core
+    - endpoints: ["p1:eth1", "p2:eth1"]
+
+    # Paris: PE-par single-homed to P1 only
+    - endpoints: ["pe-par:eth1", "p1:eth2"]
+    - endpoints: ["ce-a-par:eth1", "pe-par:eth2"]
+    - endpoints: ["ce-b-par:eth1", "pe-par:eth3"]
+    - endpoints: ["host-a-par:eth1", "ce-a-par:eth2"]
+    - endpoints: ["host-b-par:eth1", "ce-b-par:eth2"]
+
+    # Bordeaux: PE-bor single-homed to P2 only
+    - endpoints: ["pe-bor:eth1", "p2:eth2"]
+    - endpoints: ["ce-b-bor:eth1", "pe-bor:eth2"]
+    - endpoints: ["host-b-bor:eth1", "ce-b-bor:eth2"]
+
+    # Avignon: PE-avi single-homed to P2 only
+    - endpoints: ["pe-avi:eth1", "p2:eth3"]
+    - endpoints: ["ce-a-avi:eth1", "pe-avi:eth2"]
+    - endpoints: ["host-a-avi:eth1", "ce-a-avi:eth2"]
