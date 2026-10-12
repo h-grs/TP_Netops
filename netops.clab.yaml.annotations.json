@@ -1,0 +1,103 @@
+{
+  "freeTextAnnotations": [],
+  "freeShapeAnnotations": [],
+  "trafficRateAnnotations": [],
+  "groupStyleAnnotations": [],
+  "networkNodeAnnotations": [],
+  "nodeAnnotations": [
+    {
+      "id": "p1",
+      "position": {
+        "x": 200,
+        "y": 220
+      }
+    },
+    {
+      "id": "p2",
+      "position": {
+        "x": 360,
+        "y": 160
+      }
+    },
+    {
+      "id": "pe1",
+      "position": {
+        "x": 360,
+        "y": 260
+      }
+    },
+    {
+      "id": "pe2",
+      "position": {
+        "x": 360,
+        "y": 360
+      }
+    },
+    {
+      "id": "pe3",
+      "position": {
+        "x": 520,
+        "y": 260
+      }
+    },
+    {
+      "id": "cea-1",
+      "position": {
+        "x": 480,
+        "y": 120
+      }
+    },
+    {
+      "id": "ceb-1",
+      "position": {
+        "x": 280,
+        "y": 420
+      }
+    },
+    {
+      "id": "ceb-2",
+      "position": {
+        "x": 440,
+        "y": 520
+      }
+    },
+    {
+      "id": "cea-2",
+      "position": {
+        "x": 680,
+        "y": 360
+      }
+    },
+    {
+      "id": "lc1",
+      "position": {
+        "x": 660,
+        "y": 60
+      }
+    },
+    {
+      "id": "lc2",
+      "position": {
+        "x": 240,
+        "y": 600
+      }
+    },
+    {
+      "id": "lc3",
+      "position": {
+        "x": 520,
+        "y": 680
+      }
+    },
+    {
+      "id": "lc4",
+      "position": {
+        "x": 760,
+        "y": 500
+      }
+    }
+  ],
+  "edgeAnnotations": [],
+  "aliasEndpointAnnotations": [],
+  "viewerSettings": {}
+}
