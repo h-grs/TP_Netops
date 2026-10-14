@@ -1,0 +1,79 @@
+# =============================================================================
+#  Playbook 3/3 — LES VRF : raccordement des clients
+#    PE : VRF (RD, RT) + interface vers le CE + eBGP avec le CE
+#    CE : interface vers le PE + LAN + eBGP vers le PE, annonce du LAN
+#  Résultat attendu : chaque VRF contient les 2 LAN de SON client,
+#  et lc1 joint lc4 (client 1), lc2 joint lc3 (client 2).
+#  Données : host_vars → raccordements (PE), uplink/lan/asn (CE)
+#            group_vars/all/reseau.yml → tenants (id, rt)
+# =============================================================================
+- name: "VRF — côté PE"
+  hosts: pe
+  gather_facts: false
+  tasks:
+    - name: Création de la VRF
+      arista.eos.eos_config:
+        lines: ["vrf instance {{ item.vrf }}"]
+      loop: "{{ raccordements }}"
+
+    - name: Routage IP dans la VRF
+      arista.eos.eos_config:
+        lines: ["ip routing vrf {{ item.vrf }}"]
+      loop: "{{ raccordements }}"
+
+    - name: Interface vers le CE, dans la VRF (VRF avant l'adresse)
+      arista.eos.eos_config:
+        parents: "interface {{ item.nom }}"
+        lines:
+          - no switchport
+          - "vrf {{ item.vrf }}"
+          - "ip address {{ item.ip }}"
+      loop: "{{ raccordements }}"
+
+    - name: VRF dans BGP — RD, RT, voisin CE
+      arista.eos.eos_config:
+        parents: ["router bgp {{ asn_coeur }}", "vrf {{ item.vrf }}"]
+        lines:
+          - "rd {{ loopback }}:{{ tenants[item.vrf].id }}"
+          - "route-target import vpn-ipv4 {{ tenants[item.vrf].rt }}"
+          - "route-target export vpn-ipv4 {{ tenants[item.vrf].rt }}"
+          - "neighbor {{ item.ip | ansible.utils.ipaddr('peer') }} remote-as {{ hostvars[item.ce].asn }}"
+      loop: "{{ raccordements }}"
+
+    - name: Session avec le CE activée en IPv4
+      arista.eos.eos_config:
+        parents: ["router bgp {{ asn_coeur }}", "vrf {{ item.vrf }}", address-family ipv4]
+        lines:
+          - "neighbor {{ item.ip | ansible.utils.ipaddr('peer') }} activate"
+      loop: "{{ raccordements }}"
+
+#  Côté client : structure reprise du cours (slide « Jinja2 – Place holders »)
+- name: "VRF — côté CE"
+  hosts: ce
+  gather_facts: false
+  tasks:
+    - name: Routage IP
+      arista.eos.eos_config:
+        lines: [ip routing]
+
+    - name: Interface vers le PE
+      arista.eos.eos_config:
+        parents: "interface {{ uplink.nom }}"
+        lines:
+          - no switchport
+          - "ip address {{ uplink.ip }}"
+
+    - name: Interface vers le LAN
+      arista.eos.eos_config:
+        parents: "interface {{ lan.nom }}"
+        lines:
+          - no switchport
+          - "ip address {{ lan.ip }}"
+
+    - name: BGP — session vers le PE et annonce du LAN
+      arista.eos.eos_config:
+        parents: "router bgp {{ asn }}"
+        lines:
+          - "router-id {{ lan.ip | ansible.utils.ipaddr('address') }}"
+          - "neighbor {{ uplink.ip | ansible.utils.ipaddr('peer') }} remote-as {{ asn_coeur }}"
+          - "network {{ lan.ip | ansible.utils.ipaddr('network/prefix') }}"

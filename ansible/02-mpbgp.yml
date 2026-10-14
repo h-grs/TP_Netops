@@ -1,0 +1,53 @@
+# =============================================================================
+#  Playbook 2/3 — MP-BGP VPNv4 : les PE ↔ le Route Reflector p1 (AS 65000)
+#  Résultat attendu : 3 sessions Established sur p1, famille VPNv4.
+#  (0 préfixe tant que les VRF n'existent pas : c'est le playbook 3)
+#  Données : host_vars → loopback ; group_vars/all/reseau.yml → asn_coeur, rr
+# =============================================================================
+- name: "SETUP MP-BGP — chaque PE vers le RR"
+  hosts: pe
+  gather_facts: false
+  vars:
+    rr_ip: "{{ hostvars[rr].loopback }}"
+  tasks:
+    - name: Session iBGP vers le RR (depuis la loopback)
+      arista.eos.eos_config:
+        parents: "router bgp {{ asn_coeur }}"
+        lines:
+          - "router-id {{ loopback }}"
+          - no bgp default ipv4-unicast
+          - "neighbor {{ rr_ip }} remote-as {{ asn_coeur }}"
+          - "neighbor {{ rr_ip }} update-source Loopback0"
+          - "neighbor {{ rr_ip }} send-community extended"
+
+    - name: Famille VPNv4 activée
+      arista.eos.eos_config:
+        parents: ["router bgp {{ asn_coeur }}", address-family vpn-ipv4]
+        lines:
+          - "neighbor {{ rr_ip }} activate"
+
+- name: "SETUP MP-BGP — le RR p1 (aucune VRF)"
+  hosts: p
+  gather_facts: false
+  tasks:
+    - name: Seul p1 est RR (p2 ne fait pas de BGP)
+      when: inventory_hostname == rr
+      block:
+        - name: Une session par PE, déclaré client du RR
+          arista.eos.eos_config:
+            parents: "router bgp {{ asn_coeur }}"
+            lines:
+              - "router-id {{ loopback }}"
+              - no bgp default ipv4-unicast
+              - "neighbor {{ hostvars[item].loopback }} remote-as {{ asn_coeur }}"
+              - "neighbor {{ hostvars[item].loopback }} update-source Loopback0"
+              - "neighbor {{ hostvars[item].loopback }} route-reflector-client"
+              - "neighbor {{ hostvars[item].loopback }} send-community extended"
+          loop: "{{ groups['pe'] }}"
+
+        - name: Famille VPNv4 activée vers chaque PE
+          arista.eos.eos_config:
+            parents: ["router bgp {{ asn_coeur }}", address-family vpn-ipv4]
+            lines:
+              - "neighbor {{ hostvars[item].loopback }} activate"
+          loop: "{{ groups['pe'] }}"

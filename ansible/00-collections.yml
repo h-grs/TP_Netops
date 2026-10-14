@@ -1,0 +1,8 @@
+# ansible-galaxy collection install -r collections.yml
+collections:
+  - name: arista.eos          # eAPI
+    version: ">=9.0.0"
+  - name: ansible.netcommon   # connexion httpapi
+    version: ">=6.0.0"
+  - name: ansible.utils       # filtres ipaddr 
+    version: ">=4.0.0"

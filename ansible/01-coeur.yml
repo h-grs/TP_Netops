@@ -1,0 +1,57 @@
+# =============================================================================
+#  Données : host_vars/<nœud>.yml
+# =============================================================================
+- name: "Attente — les cEOS répondent sur l'eAPI (1 à 2 min après le deploy)"
+  hosts: p:pe:ce
+  gather_facts: false
+  tasks:
+    - name: show version jusqu'à réponse
+      arista.eos.eos_command:
+        commands: [show version]
+      register: version
+      retries: 30
+      delay: 10
+      until: version is succeeded
+
+- name: "Cœur — OSPF + MPLS/LDP"
+  hosts: p:pe
+  gather_facts: false
+  tasks:
+    - name: Routage IP et MPLS
+      arista.eos.eos_config:
+        lines:
+          - ip routing
+          - mpls ip
+
+    - name: Loopback0 (identité du routeur)
+      arista.eos.eos_config:
+        parents: interface Loopback0
+        lines:
+          - "ip address {{ loopback }}/32"
+          - ip ospf area 0.0.0.0
+
+    - name: Liens du cœur (OSPF + LDP)
+      arista.eos.eos_config:
+        parents: "interface {{ item.nom }}"
+        lines:
+          - no switchport
+          - "ip address {{ item.ip }}"
+          - ip ospf network point-to-point
+          - ip ospf area 0.0.0.0
+          - mpls ldp interface
+      loop: "{{ interfaces_coeur }}"
+
+    - name: OSPF
+      arista.eos.eos_config:
+        parents: router ospf 1
+        lines:
+          - "router-id {{ loopback }}"
+
+    - name: LDP (actif seulement sur les liens du cœur)
+      arista.eos.eos_config:
+        parents: mpls ldp
+        lines:
+          - "router-id {{ loopback }}"
+          - transport-address interface Loopback0
+          - interface disabled default
+          - no shutdown
