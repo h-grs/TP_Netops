@@ -1,103 +1,430 @@
 {
-  "freeTextAnnotations": [],
+  "freeTextAnnotations": [
+    {
+      "id": "titre",
+      "text": "**TP NetOps — MPLS L3VPN**",
+      "position": {
+        "x": 0,
+        "y": -20
+      },
+      "width": 900,
+      "height": 45,
+      "fontSize": 28,
+      "fontColor": "#2b3a35",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "sous-titre",
+      "text": "Les deux clients utilisent les mêmes préfixes (192.168.0.0/24 et 192.168.1.0/24) : seule la VRF les sépare.",
+      "position": {
+        "x": 0,
+        "y": 30
+      },
+      "width": 1250,
+      "height": 30,
+      "fontSize": 15,
+      "fontColor": "#5a6b64",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "coeur-protocoles",
+      "text": "OSPF aire 0 · MPLS/LDP · MP-BGP VPNv4 (p1 = route reflector, sans VRF)",
+      "position": {
+        "x": 470,
+        "y": 555
+      },
+      "width": 480,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#3b5a4e",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "coeur-loopbacks",
+      "text": "Loopback0 : p1 10.0.0.1 · p2 10.0.0.2 · pe2 10.0.0.3 · pe3 10.0.0.4 · pe1 10.0.0.5",
+      "position": {
+        "x": 470,
+        "y": 585
+      },
+      "width": 480,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#3b5a4e",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "coeur-vrf",
+      "text": "VRF TENANT_1 (RT 65000:1) = client 1  ·  VRF TENANT_2 (RT 65000:2) = client 2",
+      "position": {
+        "x": 450,
+        "y": 650
+      },
+      "width": 730,
+      "height": 28,
+      "fontSize": 14,
+      "fontColor": "#3b5a4e",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "center"
+    },
+    {
+      "id": "c1-a-lan",
+      "text": "LAN 192.168.0.0/24 · CE .1 · poste .2 · eBGP AS 65002",
+      "position": {
+        "x": 0,
+        "y": 265
+      },
+      "width": 345,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#1f5f95",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "c1-b-lan",
+      "text": "LAN 192.168.1.0/24 · CE .1 · poste .2 · eBGP AS 65005",
+      "position": {
+        "x": 1320,
+        "y": 265
+      },
+      "width": 345,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#1f5f95",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "c2-a-lan",
+      "text": "LAN 192.168.0.0/24 · CE .1 · poste .2 · eBGP AS 65003",
+      "position": {
+        "x": 0,
+        "y": 585
+      },
+      "width": 345,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#8a5316",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    },
+    {
+      "id": "c2-b-lan",
+      "text": "LAN 192.168.1.0/24 · CE .1 · poste .2 · eBGP AS 65004",
+      "position": {
+        "x": 1320,
+        "y": 585
+      },
+      "width": 345,
+      "height": 28,
+      "fontSize": 13,
+      "fontColor": "#8a5316",
+      "backgroundColor": "transparent",
+      "roundedBackground": true,
+      "fontFamily": "sans-serif",
+      "textAlign": "left"
+    }
+  ],
   "freeShapeAnnotations": [],
   "trafficRateAnnotations": [],
-  "groupStyleAnnotations": [],
+  "groupStyleAnnotations": [
+    {
+      "id": "coeur",
+      "name": "CŒUR MPLS · AS 65000",
+      "level": "L1",
+      "position": {
+        "x": 450,
+        "y": 95
+      },
+      "width": 730,
+      "height": 540,
+      "backgroundColor": "#eef2f0",
+      "backgroundOpacity": 85,
+      "borderColor": "#b8c7c0",
+      "borderWidth": 1,
+      "borderStyle": "solid",
+      "borderRadius": 20,
+      "labelColor": "#3b5a4e",
+      "labelPosition": "top-left",
+      "zIndex": -5
+    },
+    {
+      "id": "c1-a",
+      "name": "CLIENT 1 · site A (Paris)",
+      "level": "L1",
+      "position": {
+        "x": -10,
+        "y": 95
+      },
+      "width": 360,
+      "height": 220,
+      "backgroundColor": "#e3f0fb",
+      "backgroundOpacity": 85,
+      "borderColor": "#9cc4e4",
+      "borderWidth": 1,
+      "borderStyle": "solid",
+      "borderRadius": 20,
+      "labelColor": "#1f5f95",
+      "labelPosition": "top-left",
+      "zIndex": -5
+    },
+    {
+      "id": "c1-b",
+      "name": "CLIENT 1 · site B (Avignon)",
+      "level": "L1",
+      "position": {
+        "x": 1310,
+        "y": 95
+      },
+      "width": 360,
+      "height": 220,
+      "backgroundColor": "#e3f0fb",
+      "backgroundOpacity": 85,
+      "borderColor": "#9cc4e4",
+      "borderWidth": 1,
+      "borderStyle": "solid",
+      "borderRadius": 20,
+      "labelColor": "#1f5f95",
+      "labelPosition": "top-left",
+      "zIndex": -5
+    },
+    {
+      "id": "c2-a",
+      "name": "CLIENT 2 · site A (Paris)",
+      "level": "L1",
+      "position": {
+        "x": -10,
+        "y": 415
+      },
+      "width": 360,
+      "height": 220,
+      "backgroundColor": "#fdeedd",
+      "backgroundOpacity": 85,
+      "borderColor": "#e3b98a",
+      "borderWidth": 1,
+      "borderStyle": "solid",
+      "borderRadius": 20,
+      "labelColor": "#8a5316",
+      "labelPosition": "top-left",
+      "zIndex": -5
+    },
+    {
+      "id": "c2-b",
+      "name": "CLIENT 2 · site B (Bordeaux)",
+      "level": "L1",
+      "position": {
+        "x": 1310,
+        "y": 415
+      },
+      "width": 360,
+      "height": 220,
+      "backgroundColor": "#fdeedd",
+      "backgroundOpacity": 85,
+      "borderColor": "#e3b98a",
+      "borderWidth": 1,
+      "borderStyle": "solid",
+      "borderRadius": 20,
+      "labelColor": "#8a5316",
+      "labelPosition": "top-left",
+      "zIndex": -5
+    }
+  ],
   "networkNodeAnnotations": [],
   "nodeAnnotations": [
     {
       "id": "p1",
       "position": {
-        "x": 200,
-        "y": 220
-      }
+        "x": 700,
+        "y": 320
+      },
+      "icon": "spine",
+      "iconColor": "#4d7c6a",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "coeur"
     },
     {
       "id": "p2",
       "position": {
-        "x": 360,
-        "y": 160
-      }
+        "x": 900,
+        "y": 320
+      },
+      "icon": "spine",
+      "iconColor": "#4d7c6a",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "coeur"
     },
     {
       "id": "pe1",
       "position": {
-        "x": 360,
-        "y": 260
-      }
-    },
-    {
-      "id": "pe2",
-      "position": {
-        "x": 360,
-        "y": 360
-      }
+        "x": 500,
+        "y": 320
+      },
+      "icon": "router",
+      "iconColor": "#2f8f78",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "coeur"
     },
     {
       "id": "pe3",
       "position": {
-        "x": 520,
-        "y": 260
-      }
+        "x": 1100,
+        "y": 160
+      },
+      "icon": "router",
+      "iconColor": "#2f8f78",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "coeur"
+    },
+    {
+      "id": "pe2",
+      "position": {
+        "x": 1100,
+        "y": 480
+      },
+      "icon": "router",
+      "iconColor": "#2f8f78",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "coeur"
     },
     {
       "id": "cea-1",
       "position": {
-        "x": 480,
-        "y": 120
-      }
-    },
-    {
-      "id": "ceb-1",
-      "position": {
-        "x": 280,
-        "y": 420
-      }
-    },
-    {
-      "id": "ceb-2",
-      "position": {
-        "x": 440,
-        "y": 520
-      }
-    },
-    {
-      "id": "cea-2",
-      "position": {
-        "x": 680,
-        "y": 360
-      }
+        "x": 240,
+        "y": 160
+      },
+      "icon": "router",
+      "iconColor": "#2a78b8",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c1-a"
     },
     {
       "id": "lc1",
       "position": {
-        "x": 660,
-        "y": 60
-      }
+        "x": 40,
+        "y": 160
+      },
+      "icon": "client",
+      "iconColor": "#2a78b8",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c1-a"
     },
     {
-      "id": "lc2",
+      "id": "cea-2",
       "position": {
-        "x": 240,
-        "y": 600
-      }
-    },
-    {
-      "id": "lc3",
-      "position": {
-        "x": 520,
-        "y": 680
-      }
+        "x": 1360,
+        "y": 160
+      },
+      "icon": "router",
+      "iconColor": "#2a78b8",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c1-b"
     },
     {
       "id": "lc4",
       "position": {
-        "x": 760,
-        "y": 500
-      }
+        "x": 1560,
+        "y": 160
+      },
+      "icon": "client",
+      "iconColor": "#2a78b8",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c1-b"
+    },
+    {
+      "id": "ceb-1",
+      "position": {
+        "x": 240,
+        "y": 480
+      },
+      "icon": "router",
+      "iconColor": "#c8741c",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c2-a"
+    },
+    {
+      "id": "lc2",
+      "position": {
+        "x": 40,
+        "y": 480
+      },
+      "icon": "client",
+      "iconColor": "#c8741c",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c2-a"
+    },
+    {
+      "id": "ceb-2",
+      "position": {
+        "x": 1360,
+        "y": 480
+      },
+      "icon": "router",
+      "iconColor": "#c8741c",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c2-b"
+    },
+    {
+      "id": "lc3",
+      "position": {
+        "x": 1560,
+        "y": 480
+      },
+      "icon": "client",
+      "iconColor": "#c8741c",
+      "iconCornerRadius": 12,
+      "labelPosition": "bottom",
+      "labelBackgroundColor": "transparent",
+      "groupId": "c2-b"
     }
   ],
   "edgeAnnotations": [],
   "aliasEndpointAnnotations": [],
-  "viewerSettings": {}
+  "viewerSettings": {
+    "linkStyle": "elbow",
+    "linkLabelMode": "show-all"
+  }
 }

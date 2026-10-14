@@ -6,27 +6,53 @@
 #  Toute la config réseau des cEOS (loopbacks, OSPF, LDP, BGP, VRF) arrive en J2
 #  par Ansible/eAPI : rien n'est tapé à la main sur un équipement.
 #
-#  Déployer : make deploy      Détruire : make destroy      Vérifier : make check
+#  Construire : make deploy     Détruire : make destroy     Prouver J1 : make preuve-j1
 # =============================================================================
+# --- Identité du lab -------------------------------------------------------
+# `name` : nom du lab. containerlab l'écrit en label (containerlab=netops) sur
+# chaque conteneur -> scripts/j1-preuve.sh s'en sert pour compter les 13 nœuds,
+# et le dossier généré s'appelle clab-netops/ (contient ansible-inventory.yml).
 name: netops
 
+# Préfixe vide : le conteneur s'appelle exactement comme le nœud (p1, pe1...).
+# Conséquence voulue : l'inventaire généré par containerlab nomme les hôtes
+# p1, pe1... et Ansible charge donc host_vars/p1.yml, host_vars/pe1.yml...
+# (avec le préfixe par défaut "clab-netops-p1", ces fichiers seraient ignorés
+# SANS erreur — cf. cours, slide « Ansible – Les variables »).
+prefix: ""
+
+# --- Management hors bande -------------------------------------------------
+# Réseau Docker (bridge) qui porte SSH / eAPI (443) / gNMI (6030) de tous les
+# nœuds. C'est par lui qu'Ansible (J2) et gnmic (O1) joignent les équipements ;
+# les données clients, elles, ne passent jamais ici (câblage `links` plus bas).
+# Chaque nœud reçoit une IP FIXE (mgmt-ipv4) : inventaire et cibles gnmic stables.
 mgmt:
   network: netops-mgmt          # bridge dédié : n'interfère pas avec d'autres labs
   ipv4-subnet: 172.20.20.0/24   # hors bande — jamais annoncé dans OSPF ni dans les VRF
 
 topology:
+  # `kinds` = valeurs par défaut partagées par tous les nœuds d'un même type
+  # (évite de répéter image/env 9 fois).
   kinds:
     arista_ceos:
       image: ceos:4.36.1F       # version épinglée, présente sur VM_Lab
+      env:
+        # Management0 + eAPI + gNMI dans une VRF dédiée : le hors-bande a sa
+        # propre table de routage. La table globale des P/PE ne contient que le
+        # cœur (et le CE n'hérite d'aucune route par défaut vers le management).
+        CLAB_MGMT_VRF: MGMT
     linux:
       # Image déjà présente sur VM_Lab (iproute2, ping, iperf3, tcpdump).
-      # Épinglée par digest, car son tag est "latest" (interdit, cf. J3) :
-      #   make pin-hosts   remplace la ligne ci-dessous par le digest exact
+      # ligne ci-dessous par le digest exact de l'image locale, puis on commit.
+      # ON NE CHANGE PAS CAR C'EST LE LAB MAIS CE N'EST PAS NETDEVOPS QUE D'UTILISER "latest"
       image: ghcr.io/srl-labs/network-multitool:latest
 
+  # `labels: {ansible-group: X}` : containerlab range le nœud dans le groupe X de
+  # l'inventaire Ansible généré. Groupes p / pe / ce / lc -> les playbooks J2
+  # ciblent `hosts: pe` au lieu de lister les noms (cf. cours, inventaire).
   nodes:
     # ---------------------------------------------------------------- Cœur (P)
-    p1:     # P + Route Reflector
+    p1:     # P + Route Reflector VPNv4 (aucune VRF)
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.11
       labels: {ansible-group: p}
@@ -36,90 +62,81 @@ topology:
       labels: {ansible-group: p}
 
     # --------------------------------------------------------------- Bordure (PE)
-    pe1:    # Paris — TENANT_1 + TENANT_2
+    pe1:    # Paris — CLIENT 1 (TENANT_1) + CLIENT 2 (TENANT_2)
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.21
       labels: {ansible-group: pe}
-    pe2:    # Bordeaux — TENANT_2
+    pe2:    # Bordeaux — CLIENT 2
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.22
       labels: {ansible-group: pe}
-    pe3:    # Avignon — TENANT_1
+    pe3:    # Avignon — CLIENT 1
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.23
       labels: {ansible-group: pe}
 
     # --------------------------------------------------------------- Clients (CE)
-    cea-1:  # Filiale A — Paris
+    cea-1:  # CLIENT 1 site A — Paris
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.31
       labels: {ansible-group: ce}
-    ceb-1:  # Filiale B — Paris
+    ceb-1:  # CLIENT 2 site A — Paris
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.32
       labels: {ansible-group: ce}
-    ceb-2:  # Filiale B — Bordeaux
+    ceb-2:  # CLIENT 2 site B — Bordeaux
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.33
       labels: {ansible-group: ce}
-    cea-2:  # Filiale A — Avignon
+    cea-2:  # CLIENT 1 site B — Avignon
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.34
       labels: {ansible-group: ce}
 
-    # ------------------------------------------------------------- Hôtes Linux
-    # Postes utilisateurs : une passerelle, pas de protocole de routage.
-    # Route 192.168.0.0/16 (et non "default") pour garder eth0 = management.
-    lc1:    # TENANT_1 Paris, derrière cea-1
+
+    lc1:    # CLIENT 1 site A — Paris, derrière cea-1
       kind: linux
       mgmt-ipv4: 172.20.20.41
       labels: {ansible-group: lc}
       exec:
-        - ip addr add 192.168.1.10/24 dev eth1
-        - ip route add 192.168.0.0/16 via 192.168.1.1
-    lc2:    # TENANT_2 Paris, derrière ceb-1
+        - ip addr add 192.168.0.2/24 dev eth1
+        - ip route add 192.168.1.0/24 via 192.168.0.1
+    lc2:    # CLIENT 2 site A — Paris, derrière ceb-1
       kind: linux
       mgmt-ipv4: 172.20.20.42
       labels: {ansible-group: lc}
       exec:
-        - ip addr add 192.168.17.10/24 dev eth1
-        - ip route add 192.168.0.0/16 via 192.168.17.1
-    lc3:    # TENANT_2 Bordeaux, derrière ceb-2
+        - ip addr add 192.168.0.2/24 dev eth1
+        - ip route add 192.168.1.0/24 via 192.168.0.1
+    lc3:    # CLIENT 2 site B — Bordeaux, derrière ceb-2
       kind: linux
       mgmt-ipv4: 172.20.20.43
       labels: {ansible-group: lc}
       exec:
-        - ip addr add 192.168.18.10/24 dev eth1
-        - ip route add 192.168.0.0/16 via 192.168.18.1
-    lc4:    # TENANT_1 Avignon, derrière cea-2
+        - ip addr add 192.168.1.2/24 dev eth1
+        - ip route add 192.168.0.0/24 via 192.168.1.1
+    lc4:    # CLIENT 1 site B — Avignon, derrière cea-2
       kind: linux
       mgmt-ipv4: 172.20.20.44
       labels: {ansible-group: lc}
       exec:
-        - ip addr add 192.168.2.10/24 dev eth1
-        - ip route add 192.168.0.0/16 via 192.168.2.1
-
-  # ethN côté containerlab = EthernetN côté EOS
+        - ip addr add 192.168.1.2/24 dev eth1
+        - ip route add 192.168.0.0/24 via 192.168.1.1
   links:
     # ---- Cœur (OSPF aire 0 + LDP en J2) : chaîne PE1 – P1 – P2 – PE2/PE3
     - endpoints: ["p1:eth1", "pe1:eth1"]
     - endpoints: ["p1:eth2", "p2:eth1"]
     - endpoints: ["p2:eth2", "pe2:eth1"]
     - endpoints: ["p2:eth3", "pe3:eth1"]
-    # ---- Liens de secours (optionnels, test de panne O3) — décommenter si voulu
-    # - endpoints: ["p2:eth4", "pe1:eth4"]
-    # - endpoints: ["p1:eth3", "pe2:eth3"]
-    # - endpoints: ["p1:eth4", "pe3:eth3"]
 
     # ---- PE – CE (eBGP dans la VRF en J2)
-    - endpoints: ["pe1:eth2", "cea-1:eth1"]   # TENANT_1
-    - endpoints: ["pe1:eth3", "ceb-1:eth1"]   # TENANT_2
-    - endpoints: ["pe2:eth2", "ceb-2:eth1"]   # TENANT_2
-    - endpoints: ["pe3:eth2", "cea-2:eth1"]   # TENANT_1
+    - endpoints: ["pe1:eth2", "cea-1:eth1"]   # CLIENT 1
+    - endpoints: ["pe1:eth3", "ceb-1:eth1"]   # CLIENT 2
+    - endpoints: ["pe2:eth2", "ceb-2:eth1"]   # CLIENT 2
+    - endpoints: ["pe3:eth2", "cea-2:eth1"]   # CLIENT 1
 
     # ---- CE – hôte (LAN du site)
     - endpoints: ["cea-1:eth2", "lc1:eth1"]
     - endpoints: ["ceb-1:eth2", "lc2:eth1"]
     - endpoints: ["ceb-2:eth2", "lc3:eth1"]
     - endpoints: ["cea-2:eth2", "lc4:eth1"]
-
