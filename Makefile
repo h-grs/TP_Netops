@@ -18,13 +18,13 @@ inspect:  ## État des nœuds et IP de management
 # ---- J2 : Ansible
 deps:  ## Dépendances (une seule fois) : netaddr dans l'Ansible pipx + collections
 	pipx inject ansible netaddr
-	ansible-galaxy collection install -r ansible/requirements.yml
+	ansible-galaxy collection install -r ansible/collections.yml
 coeur:  ## Playbook 1 : OSPF + MPLS/LDP
-	$(PB) coeur.yml
+	$(PB) 01-coeur.yml
 mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
-	$(PB) mpbgp.yml
+	$(PB) 02-mpbgp.yml
 vrf:  ## Playbook 3 : VRF + PE–CE + CE
-	$(PB) vrf.yml
+	$(PB) 03-vrf.yml
 provision:  ## Les 3 playbooks d'affilée
 	$(PB) site.yml
  
