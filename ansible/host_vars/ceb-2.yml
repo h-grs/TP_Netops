@@ -1,5 +1,6 @@
-# CEB_2 — Filiale B, Bordeaux
+# CEB_2 — CLIENT 2, site B (Bordeaux) — raccordé à pe2 dans la VRF VRFB
+# Même LAN que cea-2 (192.168.1.0/24) : chevauchement voulu, la VRF les sépare.
 asn: 65004
-tenant: TENANT_2
-uplink: {nom: Ethernet1, ip: 172.21.0.1/31, pe: pe2}         
-lan:    {nom: Ethernet2, ip: 192.168.2.1/16, hote: lc3}     
+tenant: VRFB
+uplink: {nom: Ethernet1, ip: 172.21.0.5/31, pe: pe2}
+lan:    {nom: Ethernet2, ip: 192.168.1.1/24, hote: lc3, hote_ip: 192.168.1.2}

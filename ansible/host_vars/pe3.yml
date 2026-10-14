@@ -1,7 +1,6 @@
-# PE3 — Avignon : TENANT_1 uniquement
-bgp: {asn: 65000, role: pe-client}
+# PE3 — Avignon : client 1 (VRFA) uniquement
 loopback: 10.0.0.4
 interfaces_coeur:
   - {nom: Ethernet1, ip: 10.10.0.7/31, vers: p2}
 raccordements:
-  - {nom: Ethernet2, vrf: TENANT_1, ip: 172.21.0.0/31, ce: cea-2}
+  - {nom: Ethernet2, vrf: VRFA, ip: 172.21.0.6/31, ce: cea-2}

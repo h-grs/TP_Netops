@@ -1,0 +1,14 @@
+# =============================================================================
+#  Connexion aux cEOS : eAPI = JSON-RPC sur HTTPS/443, c'est Ansible qui initie.
+#  "arista_ceos" est le groupe que containerlab crée à partir du kind.
+#  (identifiants du lab : ceux de l'image cEOS déployée par containerlab)
+# =============================================================================
+ansible_connection: ansible.netcommon.httpapi
+ansible_network_os: arista.eos.eos
+ansible_httpapi_use_ssl: true
+ansible_httpapi_validate_certs: false
+ansible_httpapi_port: 443
+ansible_user: admin
+ansible_password: admin
+ansible_become: true
+ansible_become_method: enable

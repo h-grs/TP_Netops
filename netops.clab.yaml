@@ -1,68 +1,41 @@
-# =============================================================================
-#  TP NetOps — MPLS L3VPN — Jalon 1 : « le lab existe »
-#  13 conteneurs : 9 cEOS (2 P, 3 PE, 4 CE) + 4 hôtes Linux
-#
-#  Ce fichier ne décrit QUE le câblage, le management et les hôtes.
-#  Toute la config réseau des cEOS (loopbacks, OSPF, LDP, BGP, VRF) arrive en J2
-#  par Ansible/eAPI : rien n'est tapé à la main sur un équipement.
-#
-#  Construire : make deploy     Détruire : make destroy     Prouver J1 : make preuve-j1
-# =============================================================================
-# --- Identité du lab -------------------------------------------------------
-# `name` : nom du lab. containerlab l'écrit en label (containerlab=netops) sur
-# chaque conteneur -> scripts/j1-preuve.sh s'en sert pour compter les 13 nœuds,
-# et le dossier généré s'appelle clab-netops/ (contient ansible-inventory.yml).
 name: netops
 
 # Préfixe vide : le conteneur s'appelle exactement comme le nœud (p1, pe1...).
-# Conséquence voulue : l'inventaire généré par containerlab nomme les hôtes
-# p1, pe1... et Ansible charge donc host_vars/p1.yml, host_vars/pe1.yml...
-# (avec le préfixe par défaut "clab-netops-p1", ces fichiers seraient ignorés
-# SANS erreur — cf. cours, slide « Ansible – Les variables »).
 prefix: ""
 
-# --- Management hors bande -------------------------------------------------
-# Réseau Docker (bridge) qui porte SSH / eAPI (443) / gNMI (6030) de tous les
-# nœuds. C'est par lui qu'Ansible (J2) et gnmic (O1) joignent les équipements ;
-# les données clients, elles, ne passent jamais ici (câblage `links` plus bas).
-# Chaque nœud reçoit une IP FIXE (mgmt-ipv4) : inventaire et cibles gnmic stables.
 mgmt:
-  network: netops-mgmt          # bridge dédié : n'interfère pas avec d'autres labs
+  network: netops-mgmt          
   ipv4-subnet: 172.20.20.0/24   # hors bande — jamais annoncé dans OSPF ni dans les VRF
 
 topology:
   # `kinds` = valeurs par défaut partagées par tous les nœuds d'un même type
-  # (évite de répéter image/env 9 fois).
   kinds:
     arista_ceos:
       image: ceos:4.36.1F       # version épinglée, présente sur VM_Lab
       env:
-        # Management0 + eAPI + gNMI dans une VRF dédiée : le hors-bande a sa
-        # propre table de routage. La table globale des P/PE ne contient que le
-        # cœur (et le CE n'hérite d'aucune route par défaut vers le management).
         CLAB_MGMT_VRF: MGMT
     linux:
       # Image déjà présente sur VM_Lab (iproute2, ping, iperf3, tcpdump).
+      # Son tag est "latest" (interdit, cf. J3) : `make pin-hosts` remplace la
       # ligne ci-dessous par le digest exact de l'image locale, puis on commit.
-      # ON NE CHANGE PAS CAR C'EST LE LAB MAIS CE N'EST PAS NETDEVOPS QUE D'UTILISER "latest"
       image: ghcr.io/srl-labs/network-multitool:latest
 
   # `labels: {ansible-group: X}` : containerlab range le nœud dans le groupe X de
   # l'inventaire Ansible généré. Groupes p / pe / ce / lc -> les playbooks J2
-  # ciblent `hosts: pe` au lieu de lister les noms (cf. cours, inventaire).
+  # ciblent `hosts: pe`
   nodes:
     # ---------------------------------------------------------------- Cœur (P)
     p1:     # P + Route Reflector VPNv4 (aucune VRF)
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.11
       labels: {ansible-group: p}
-    p2:     # P pur : OSPF + LDP, aucun BGP
+    p2:     # P pur : OSPF + LDP
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.12
       labels: {ansible-group: p}
 
     # --------------------------------------------------------------- Bordure (PE)
-    pe1:    # Paris — CLIENT 1 (TENANT_1) + CLIENT 2 (TENANT_2)
+    pe1:    # Paris — CLIENT 1 (VRFA) + CLIENT 2 (VRFB)
       kind: arista_ceos
       mgmt-ipv4: 172.20.20.21
       labels: {ansible-group: pe}
@@ -93,7 +66,7 @@ topology:
       mgmt-ipv4: 172.20.20.34
       labels: {ansible-group: ce}
 
-
+    # ------------------------------------------------------------- Hôtes Linux
     lc1:    # CLIENT 1 site A — Paris, derrière cea-1
       kind: linux
       mgmt-ipv4: 172.20.20.41
@@ -122,6 +95,8 @@ topology:
       exec:
         - ip addr add 192.168.1.2/24 dev eth1
         - ip route add 192.168.0.0/24 via 192.168.1.1
+
+  # (host_vars), pas ici. Un endpoint ne peut servir qu'une fois.
   links:
     # ---- Cœur (OSPF aire 0 + LDP en J2) : chaîne PE1 – P1 – P2 – PE2/PE3
     - endpoints: ["p1:eth1", "pe1:eth1"]

@@ -1,0 +1,14 @@
+# =============================================================================
+#  Données communes à tout le lab — ce qui NE varie PAS d'un équipement à l'autre.
+#  Ce qui varie (adresses, interfaces, ASN des CE) est dans host_vars/<nœud>.yml.
+# =============================================================================
+
+# ---- Cœur opérateur ---------------------------------------------------------
+asn_coeur: 65000            # un AS pour tout le backbone
+rr: p1                      # rôle Route Reflector VPNv4 (un rôle, pas un équipement)
+ospf_process: 1
+ospf_area: 0.0.0.0
+
+tenants:
+  VRFA: {id: 1, rt: "65000:1", nom: "Client 1"}
+  VRFB: {id: 2, rt: "65000:2", nom: "Client 2"}

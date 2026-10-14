@@ -50,7 +50,7 @@
     },
     {
       "id": "coeur-loopbacks",
-      "text": "Loopback0 : p1 10.0.0.1 · p2 10.0.0.2 · pe2 10.0.0.3 · pe3 10.0.0.4 · pe1 10.0.0.5",
+      "text": "Loopback0 : pe1 10.0.0.0 · p1 10.0.0.1 · p2 10.0.0.2 · pe2 10.0.0.3 · pe3 10.0.0.4",
       "position": {
         "x": 470,
         "y": 585
@@ -66,7 +66,7 @@
     },
     {
       "id": "coeur-vrf",
-      "text": "VRF TENANT_1 (RT 65000:1) = client 1  ·  VRF TENANT_2 (RT 65000:2) = client 2",
+      "text": "VRF VRFA (RT 65000:1) = client 1  ·  VRF VRFB (RT 65000:2) = client 2",
       "position": {
         "x": 450,
         "y": 650

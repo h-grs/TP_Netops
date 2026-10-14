@@ -1,8 +1,7 @@
 # PE1 — Paris : porte les deux tenants (mutualisation, étanchéité par les VRF)
-bgp: {asn: 65000, role: pe-client}
-loopback: 10.0.0.5
+loopback: 10.0.0.0
 interfaces_coeur:
   - {nom: Ethernet1, ip: 10.10.0.0/31, vers: p1}
-raccordements:            # liens PE–CE : PE = .0, CE = .1 (même /31 réutilisé, une table par VRF)
-  - {nom: Ethernet2, vrf: TENANT_1, ip: 172.21.0.0/31, ce: cea-1}
-  - {nom: Ethernet3, vrf: TENANT_2, ip: 172.21.0.0/31, ce: ceb-1}
+raccordements:            # liens PE–CE : un /31 unique par liaison (règle dans group_vars/all/reseau.yml)
+  - {nom: Ethernet2, vrf: VRFA, ip: 172.21.0.0/31, ce: cea-1}
+  - {nom: Ethernet3, vrf: VRFB, ip: 172.21.0.2/31, ce: ceb-1}

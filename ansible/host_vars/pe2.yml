@@ -1,7 +1,6 @@
-# PE2 — Bordeaux : TENANT_2 uniquement
-bgp: {asn: 65000, role: pe-client}
+# PE2 — Bordeaux : client 2 (VRFB) uniquement
 loopback: 10.0.0.3
 interfaces_coeur:
   - {nom: Ethernet1, ip: 10.10.0.5/31, vers: p2}
 raccordements:
-  - {nom: Ethernet2, vrf: TENANT_2, ip: 172.21.0.0/31, ce: ceb-2}
+  - {nom: Ethernet2, vrf: VRFB, ip: 172.21.0.4/31, ce: ceb-2}

@@ -1,5 +1,5 @@
-# P1 — cœur + Route Reflector (rôle défini dans group_vars/all/reseau.yml : rr: p1)
-bgp: {asn: 65000, role: route-reflector}
+# P1 — cœur + Route Reflector VPNv4 (rôle désigné dans group_vars/all/reseau.yml : rr: p1)
+# Aucune VRF : il reflète des routes clients sans jamais les installer dans sa RIB.
 loopback: 10.0.0.1
 interfaces_coeur:
   - {nom: Ethernet1, ip: 10.10.0.1/31, vers: pe1}
