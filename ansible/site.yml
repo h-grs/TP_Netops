@@ -1,9 +1,9 @@
 # =============================================================================
 #  J2 — La chaîne complète, dans l'ordre : chaque playbook rend possible le suivant.
-#    1. coeur.yml   OSPF + MPLS/LDP               (P, PE)
-#    2. mpbgp.yml   MP-BGP VPNv4, RR = p1         (PE, p1)
-#    3. vrf.yml     VRF + raccordements PE–CE     (PE, CE)
+#    1. 01-coeur.yml   OSPF + MPLS/LDP               (P, PE)
+#    2. 02-mpbgp.yml  MP-BGP VPNv4, RR = p1         (PE, p1)
+#    3. 03-vrf.yml    VRF + raccordements PE–CE     (PE, CE)
 # =============================================================================
-- import_playbook: coeur.yml
-- import_playbook: mpbgp.yml
-- import_playbook: vrf.yml
+- import_playbook: 01-coeur.yml
+- import_playbook: 02-mpbgp.yml
+- import_playbook: 03-vrf.yml
