@@ -1,0 +1,56 @@
+# =============================================================================
+#  Alimente Nautobot depuis l'inventaire Ansible                  make nautobot-sync
+#  Sens : host_vars (source) → Nautobot (reflet). Rejouable : ne crée que ce qui manque.
+#  Jeton API : NAUTOBOT_TOKEN dans l'environnement (jamais dans le dépôt).
+# =============================================================================
+- name: Nautobot reflète les 9 nœuds du lab
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nb_url: http://10.200.4.68:8080
+    nb_headers:
+      Authorization: "Token {{ lookup('env', 'NAUTOBOT_TOKEN') }}"
+      Accept: application/json
+    site: Lab G4
+    actif: {name: Active}
+    role_par_groupe: {p: P, pe: PE, ce: CE}
+
+    # Objets de base, dans l'ordre de dépendance
+    base:
+      - {endpoint: dcim/location-types, filtre: "name=Site",
+         body: {name: Site, content_types: [dcim.device]}}
+      - {endpoint: dcim/locations, filtre: "name={{ site }}",
+         body: {name: "{{ site }}", location_type: {name: Site}, status: "{{ actif }}"}}
+      - {endpoint: dcim/manufacturers, filtre: "name=Arista", body: {name: Arista}}
+      - {endpoint: dcim/device-types, filtre: "model=cEOS",
+         body: {model: cEOS, manufacturer: {name: Arista}}}
+      - {endpoint: extras/roles, filtre: "name=P",  body: {name: P,  content_types: [dcim.device]}}
+      - {endpoint: extras/roles, filtre: "name=PE", body: {name: PE, content_types: [dcim.device]}}
+      - {endpoint: extras/roles, filtre: "name=CE", body: {name: CE, content_types: [dcim.device]}}
+  tasks:
+    - name: Jeton présent ?
+      ansible.builtin.assert:
+        that: lookup('env', 'NAUTOBOT_TOKEN') | length > 0
+        fail_msg: "Exporter NAUTOBOT_TOKEN (Nautobot → profil → API Tokens)"
+        quiet: true
+
+    - name: Objets de base
+      ansible.builtin.include_tasks: nautobot_ensure.yml
+      loop: "{{ base }}"
+      loop_control: {loop_var: obj, label: "{{ obj.endpoint }} {{ obj.filtre }}"}
+
+    - name: Un équipement par nœud Arista (nom = nom d'inventaire)
+      ansible.builtin.include_tasks: nautobot_ensure.yml
+      loop: "{{ groups['p'] + groups['pe'] + groups['ce'] }}"
+      loop_control: {loop_var: noeud, label: "{{ noeud }}"}
+      vars:
+        groupe: "{{ ['p', 'pe', 'ce'] | select('in', hostvars[noeud].group_names) | first }}"
+        obj:
+          endpoint: dcim/devices
+          filtre: "name={{ noeud }}"
+          body:
+            name: "{{ noeud }}"
+            device_type: {model: cEOS}
+            role: {name: "{{ role_par_groupe[groupe] }}"}
+            location: {name: "{{ site }}"}
+            status: "{{ actif }}"

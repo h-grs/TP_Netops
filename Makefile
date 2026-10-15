@@ -5,10 +5,11 @@ TOOLS    := NetOps@10.200.4.68
 SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
 
-.PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli
+.PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync
 
 help:  ## Liste des cibles
-	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
+	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 # ---- J1 : le lab
 deploy:  ## Crée les 13 conteneurs
@@ -47,6 +48,7 @@ closedness:  ## Test d'étanchéité (pose le canari, teste, le retire)
 cli:  ## CLI d'un nœud : make cli N=p1
 	docker exec -it $(N) Cli
 
+# ---- VM tools : les fichiers restent sur la VM tools, pilotés en SSH
 tools-status:  ## Conteneurs qui tournent sur la VM tools
 	$(SSH) 'docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
@@ -56,8 +58,9 @@ nautobot-up:  ## Démarre Nautobot sur la VM tools
 nautobot-down:  ## Arrête Nautobot sur la VM tools
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke stop"'
 
+nautobot-sync:  ## Alimente Nautobot depuis l'inventaire (jeton lu dans creds.env de la VM tools)
+	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \
+	$(PB) 300-nautobot-sync.yml
+
 nautobot-tasks:  ## Liste les commandes invoke disponibles
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke --list"'
-
-# Branche observabilité (zip séparé) : ce fichier n'existe que si on l'a ajouté
--include observabilite.mk
