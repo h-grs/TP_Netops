@@ -3,7 +3,7 @@
 #  Sens : host_vars (source) → Nautobot (reflet). Rejouable : ne crée que ce qui manque.
 #  Jeton API : NAUTOBOT_TOKEN dans l'environnement (jamais dans le dépôt).
 # =============================================================================
-- name: Nautobot reflète les 9 nœuds du lab
+- name: Nautobot reflète le lab (9 nœuds Arista + 4 postes clients)
   hosts: localhost
   gather_facts: false
   vars:
@@ -27,6 +27,11 @@
       - {endpoint: extras/roles, filtre: "name=P",  body: {name: P,  content_types: [dcim.device]}}
       - {endpoint: extras/roles, filtre: "name=PE", body: {name: PE, content_types: [dcim.device]}}
       - {endpoint: extras/roles, filtre: "name=CE", body: {name: CE, content_types: [dcim.device]}}
+      # Postes clients (conteneurs Linux du groupe lc)
+      - {endpoint: dcim/manufacturers, filtre: "name=Linux", body: {name: Linux}}
+      - {endpoint: dcim/device-types, filtre: "model=linux-host",
+         body: {model: linux-host, manufacturer: {name: Linux}}}
+      - {endpoint: extras/roles, filtre: "name=Poste", body: {name: Poste, content_types: [dcim.device]}}
   tasks:
     - name: Jeton présent ?
       ansible.builtin.assert:
@@ -52,5 +57,20 @@
             name: "{{ noeud }}"
             device_type: {model: cEOS}
             role: {name: "{{ role_par_groupe[groupe] }}"}
+            location: {name: "{{ site }}"}
+            status: "{{ actif }}"
+
+    - name: Un équipement par poste client (groupe lc de l'inventaire containerlab)
+      ansible.builtin.include_tasks: nautobot_ensure.yml
+      loop: "{{ groups['lc'] | default([]) }}"
+      loop_control: {loop_var: poste, label: "{{ poste }}"}
+      vars:
+        obj:
+          endpoint: dcim/devices
+          filtre: "name={{ poste }}"
+          body:
+            name: "{{ poste }}"
+            device_type: {model: linux-host}
+            role: {name: Poste}
             location: {name: "{{ site }}"}
             status: "{{ actif }}"

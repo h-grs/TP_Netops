@@ -7,8 +7,21 @@ Tout se pilote avec `make` depuis la VM lab. Tape `make help` pour la liste des 
 
 | VM | IP | Rôle | Fichiers |
 |---|---|---|---|
-| lab | `10.200.4.120` | containerlab + Ansible | ce dépôt |
-| tools | `10.200.4.68` | Nautobot | **sur la VM tools uniquement**, pilotés en SSH par ce Makefile |
+| lab | `10.200.4.120` | containerlab + Ansible | ce dépôt **sans** `tools/` (sparse-checkout) |
+| tools | `10.200.4.68` | Nautobot (13 équipements : 9 cEOS + 4 postes) | **uniquement** `tools/` de ce dépôt (sparse-checkout), + `~/nautobot-docker-compose` ; piloté en SSH par ce Makefile |
+
+### Un dépôt, deux VMs (sparse-checkout)
+
+Chaque VM ne récupère que sa partie du même dépôt :
+
+```bash
+# VM lab   : tout sauf tools/
+git sparse-checkout set --no-cone '/*' '!/tools/'
+# VM tools : seulement tools/
+git sparse-checkout set --no-cone '/tools/'
+```
+
+Chaque VM commite sa partie ; toujours `git pull` avant de travailler.
 
 ## Topologie
 
@@ -62,7 +75,8 @@ make nautobot-up   # démarre Nautobot sur la VM tools
 | `tools-status` | Conteneurs qui tournent sur la VM tools |
 | `nautobot-up` / `nautobot-down` | Démarre / arrête Nautobot sur la VM tools |
 | `nautobot-tasks` | Liste les commandes `invoke` disponibles |
-| `nautobot-sync` | Alimente Nautobot depuis l'inventaire (9 équipements) |
+| `nautobot-sync` | Alimente Nautobot : 9 nœuds Arista + 4 postes clients |
+| `nautobot-devices` | Liste les équipements présents dans Nautobot |
 
 ## Vérifier
 
