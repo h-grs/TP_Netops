@@ -1,6 +1,9 @@
 TOPO := netops.clab.yaml
 CLAB ?= sudo containerlab
 PB   := cd ansible && ansible-playbook
+TOOLS    := NetOps@10.200.4.68
+SSH      := ssh -o BatchMode=yes $(TOOLS)
+NAUTOBOT := ~/nautobot-docker-compose
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli
 
@@ -43,6 +46,18 @@ closedness:  ## Test d'étanchéité (pose le canari, teste, le retire)
 # ---- CLI pour la démo || Doit être up avant
 cli:  ## CLI d'un nœud : make cli N=p1
 	docker exec -it $(N) Cli
+
+tools-status:  ## Conteneurs qui tournent sur la VM tools
+	$(SSH) 'docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+
+nautobot-up:  ## Démarre Nautobot sur la VM tools
+	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke start"'
+
+nautobot-down:  ## Arrête Nautobot sur la VM tools
+	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke stop"'
+
+nautobot-tasks:  ## Liste les commandes invoke disponibles
+	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke --list"'
 
 # Branche observabilité (zip séparé) : ce fichier n'existe que si on l'a ajouté
 -include observabilite.mk
