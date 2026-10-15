@@ -1,0 +1,241 @@
+# =============================================================================
+#  CHECKUP EN ESCALIER — lecture seule, une couche après l'autre      make checkup
+#
+#    Barreau 1  Sous-jacent       OSPF, loopbacks, LDP
+#    Barreau 2  Plan de contrôle  BGP VPNv4 (PE ↔ RR) et eBGP (PE ↔ CE)
+#    Barreau 3  Plan de données   routes dans les VRF, rien de client sur les P
+#    Barreau 4  Trafic            ping entre les sites d'un même client
+#
+#  Le premier échec arrête tout (any_errors_fatal) : on sait quel barreau
+#  est cassé, et on ne teste pas une couche dont le socle est faux.
+#
+#  Principe de chaque barreau :
+#    1. on lance les commandes "show" et on RÉESSAIE (6 x 10 s) le temps que
+#       le réseau converge
+#    2. on vérifie avec un assert dont le message d'erreur dit ce qui manque
+#
+#  Astuce de lecture : on compte des mots dans la sortie texte du routeur.
+#    Ex. 'FULL' apparaît une fois par voisin OSPF → .count('FULL') = nb de voisins
+#
+#  failed_when: false = "ne plante pas ici, c'est l'assert qui jugera"
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+#  BARREAU 1 — Sous-jacent
+# -----------------------------------------------------------------------------
+- name: "Barreau 1/4 — OSPF, loopbacks, LDP"
+  hosts: p:pe
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    nb_liens: "{{ interfaces_coeur | length }}"            # 1 voisin attendu par lien
+    nb_ospf_full: "{{ r.stdout[0].count('FULL') }}"        # voisins OSPF en FULL
+    nb_ldp: "{{ r.stdout[2].count('State: oper') }}"       # sessions LDP opérationnelles
+    # Loopbacks de tous les routeurs du cœur (P + PE)
+    loopbacks: "{{ (groups['p'] + groups['pe']) | map('extract', hostvars, 'loopback') | list }}"
+  tasks:
+    - name: Relevé OSPF / routes / LDP (réessaie jusqu'à 60 s)
+      arista.eos.eos_command:
+        commands:
+          - show ip ospf neighbor
+          - show ip route
+          - show mpls ldp neighbor
+      register: r
+      until: nb_ospf_full | int == nb_liens | int and nb_ldp | int == nb_liens | int
+      retries: 6
+      delay: 10
+      failed_when: false
+
+    - name: OSPF — un voisin FULL par lien
+      ansible.builtin.assert:
+        that: nb_ospf_full | int == nb_liens | int
+        fail_msg: "{{ nb_ospf_full }} voisin(s) FULL, attendu {{ nb_liens }}"
+
+    - name: LDP — une session par lien
+      ansible.builtin.assert:
+        that: nb_ldp | int == nb_liens | int
+        fail_msg: "{{ nb_ldp }} session(s) LDP, attendu {{ nb_liens }}"
+
+    - name: Loopbacks — chacune est dans la table de routage
+      ansible.builtin.assert:
+        that: (loop_ip ~ '/32') in r.stdout[1]
+        fail_msg: "loopback {{ loop_ip }} absente de la table de {{ inventory_hostname }}"
+      loop: "{{ loopbacks }}"
+      loop_control:
+        loop_var: loop_ip
+
+
+# -----------------------------------------------------------------------------
+#  BARREAU 2 — Plan de contrôle
+#  On compte les mots "Estab" (= Established) dans la sortie BGP.
+# -----------------------------------------------------------------------------
+- name: "Barreau 2a/4 — RR : une session VPNv4 par PE"
+  hosts: p
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    nb_attendu: "{{ groups['pe'] | length }}"
+    nb_etablies: "{{ bgp.stdout[0].count('Estab') }}"
+  tasks:
+    - name: Relevé VPNv4 (seul le RR fait du BGP)
+      when: inventory_hostname == rr
+      arista.eos.eos_command:
+        commands: [show bgp vpn-ipv4 summary]
+      register: bgp
+      until: nb_etablies | int == nb_attendu | int
+      retries: 6
+      delay: 10
+      failed_when: false
+
+    - name: VPNv4 Established avec chaque PE
+      when: inventory_hostname == rr
+      ansible.builtin.assert:
+        that: nb_etablies | int == nb_attendu | int
+        fail_msg: "{{ nb_etablies }} session(s) VPNv4 établie(s), attendu {{ nb_attendu }}"
+
+- name: "Barreau 2b/4 — PE : session vers le RR + eBGP vers ses CE"
+  hosts: pe
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    nb_ce_attendus: "{{ raccordements | length }}"       # 1 session eBGP par CE raccordé
+    nb_vpnv4: "{{ bgp.stdout[0].count('Estab') }}"       # attendu : 1 (le RR)
+    nb_ebgp: "{{ bgp.stdout[1].count('Estab') }}"
+  tasks:
+    - name: Relevé BGP (VPNv4 puis toutes les VRF)
+      arista.eos.eos_command:
+        commands:
+          - show bgp vpn-ipv4 summary
+          - show ip bgp summary vrf all
+      register: bgp
+      until: nb_vpnv4 | int == 1 and nb_ebgp | int == nb_ce_attendus | int
+      retries: 6
+      delay: 10
+      failed_when: false
+
+    - name: VPNv4 Established avec le RR
+      ansible.builtin.assert:
+        that: nb_vpnv4 | int == 1
+        fail_msg: "session VPNv4 vers le RR {{ rr }} non établie"
+
+    - name: eBGP Established avec chaque CE
+      ansible.builtin.assert:
+        that: nb_ebgp | int == nb_ce_attendus | int
+        fail_msg: "{{ nb_ebgp }} session(s) eBGP établie(s), attendu {{ nb_ce_attendus }}"
+
+- name: "Barreau 2c/4 — CE : eBGP vers son PE"
+  hosts: ce
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    nb_ebgp: "{{ bgp.stdout[0].count('Estab') }}"        # attendu : 1 (son PE)
+  tasks:
+    - name: Relevé BGP
+      arista.eos.eos_command:
+        commands: [show ip bgp summary]
+      register: bgp
+      until: nb_ebgp | int == 1
+      retries: 6
+      delay: 10
+      failed_when: false
+
+    - name: eBGP Established avec le PE
+      ansible.builtin.assert:
+        that: nb_ebgp | int == 1
+        fail_msg: "session eBGP vers {{ uplink.pe }} non établie"
+
+
+# -----------------------------------------------------------------------------
+#  BARREAU 3 — Plan de données
+#
+#  Les deux clients ont les MÊMES LAN, donc on ne peut pas tester
+#  "le LAN de l'autre client est absent". On teste à la place :
+#  dans la VRF d'un client, la route d'un site distant passe par le BON PE.
+# -----------------------------------------------------------------------------
+- name: "Barreau 3a/4 — PE : chaque VRF contient les LAN des sites de son client"
+  hosts: pe
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    vrfs_du_pe: "{{ raccordements | map(attribute='vrf') | list }}"
+  tasks:
+    # Pour chaque CE, on regarde sa route dans la VRF de son client
+    # (la VRF porte le nom du client : tenant)
+    - name: Relevé de la route de chaque site, dans la VRF de son client
+      when: hostvars[ce].tenant in vrfs_du_pe
+      arista.eos.eos_command:
+        # "192.168.1.1/24" → "192.168.1.0/24" (adresse du réseau)
+        commands:
+          - "show ip route vrf {{ hostvars[ce].tenant }} {{ hostvars[ce].lan.ip | ansible.utils.ipaddr('network/prefix') }}"
+      loop: "{{ groups['ce'] }}"
+      loop_control:
+        loop_var: ce
+      register: routes
+
+    - name: La route est là, et passe par le bon PE
+      when: res is not skipped
+      ansible.builtin.assert:
+        that:
+          - lan in res.stdout[0]                  # la route existe
+          - site_local or pe_du_site in res.stdout[0]   # sinon, next-hop = PE distant
+        fail_msg: "VRF {{ hostvars[res.ce].tenant }} : {{ lan }} ({{ res.ce }}) absent ou pas via {{ hostvars[res.ce].uplink.pe }} ({{ pe_du_site }})"
+      loop: "{{ routes.results }}"
+      loop_control:
+        loop_var: res
+        label: "{{ res.ce }}"
+      vars:
+        lan: "{{ hostvars[res.ce].lan.ip | ansible.utils.ipaddr('network/prefix') }}"
+        site_local: "{{ hostvars[res.ce].uplink.pe == inventory_hostname }}"   # CE branché sur CE PE-ci ?
+        pe_du_site: "{{ hostvars[hostvars[res.ce].uplink.pe].loopback }}"      # loopback du PE du CE
+
+- name: "Barreau 3b/4 — P : aucune route client dans le cœur"
+  hosts: p
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Relevé de la table de routage
+      arista.eos.eos_command:
+        commands: [show ip route]
+      register: rib
+
+    - name: Pas de 192.168.x.x ni 172.21.x.x dans la table
+      ansible.builtin.assert:
+        that:
+          - "'192.168.' not in rib.stdout[0]"
+          - "'172.21.' not in rib.stdout[0]"
+        fail_msg: "des routes client sont visibles sur {{ inventory_hostname }} : le cœur n'est plus agnostique"
+
+
+# -----------------------------------------------------------------------------
+#  BARREAU 4 — Trafic
+#  Chaque CE ping le poste de l'autre site du MÊME client.
+# -----------------------------------------------------------------------------
+- name: "Barreau 4/4 — chaque site joint le poste de l'autre site de son client"
+  hosts: ce
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    mon_ip: "{{ lan.ip | ansible.utils.ipaddr('address') }}"   # "192.168.1.1/24" → "192.168.1.1"
+  tasks:
+    - name: Ping du poste distant
+      # Autre site du même client = même tenant, mais pas moi
+      when: hostvars[autre].tenant == tenant and autre != inventory_hostname
+      arista.eos.eos_command:
+        # source = notre LAN, sinon le ping part du lien PE–CE, hors VPN
+        commands:
+          - "ping {{ hostvars[autre].lan.hote_ip }} source {{ mon_ip }} repeat 3"
+      loop: "{{ groups['ce'] }}"
+      loop_control:
+        loop_var: autre
+      register: pings
+
+    - name: 3 réponses sur 3
+      when: p is not skipped
+      ansible.builtin.assert:
+        that: "'3 received' in p.stdout[0]"
+        fail_msg: "{{ inventory_hostname }} → {{ hostvars[p.autre].lan.hote }} ({{ hostvars[p.autre].lan.hote_ip }}) : pertes de paquets"
+      loop: "{{ pings.results }}"
+      loop_control:
+        loop_var: p
+        label: "{{ inventory_hostname }} → {{ p.autre }}"

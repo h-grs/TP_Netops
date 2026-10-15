@@ -2,7 +2,7 @@
 #  Playbook 2/3 — MP-BGP VPNv4 : les PE ↔ le Route Reflector p1 (AS 65000)
 #  Résultat attendu : 3 sessions Established sur p1, famille VPNv4.
 #  (0 préfixe tant que les VRF n'existent pas : c'est le playbook 3)
-#  Données : host_vars → loopback ; group_vars/all/reseau.yml → asn_coeur, rr
+#  Données : host_vars → loopback ; group_vars/all/network.yml → asn_coeur, rr
 # =============================================================================
 - name: "SETUP MP-BGP — chaque PE vers le RR"
   hosts: pe
@@ -16,6 +16,7 @@
         lines:
           - "router-id {{ loopback }}"
           - no bgp default ipv4-unicast
+          #IMPORTANT, SERT A ASSIGNER l'asn renseigné dans group_vars/all/network.yml
           - "neighbor {{ rr_ip }} remote-as {{ asn_coeur }}"
           - "neighbor {{ rr_ip }} update-source Loopback0"
           - "neighbor {{ rr_ip }} send-community extended"
@@ -31,6 +32,7 @@
   gather_facts: false
   tasks:
     - name: Seul p1 est RR (p2 ne fait pas de BGP)
+    # When : Enlève P2 de la collection car role  != "rr"
       when: inventory_hostname == rr
       block:
         - name: Une session par PE, déclaré client du RR
@@ -39,7 +41,7 @@
             lines:
               - "router-id {{ loopback }}"
               - no bgp default ipv4-unicast
-              - "neighbor {{ hostvars[item].loopback }} remote-as {{ asn_coeur }}"
+              - "neighbor {{ hostvars[item].loopback }} remote-as {{ asn_coeur }}" # les hostvars accède aux variables
               - "neighbor {{ hostvars[item].loopback }} update-source Loopback0"
               - "neighbor {{ hostvars[item].loopback }} route-reflector-client"
               - "neighbor {{ hostvars[item].loopback }} send-community extended"

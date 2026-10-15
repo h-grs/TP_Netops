@@ -1,6 +1,6 @@
 TOPO := netops.clab.yaml
 CLAB ?= sudo containerlab
-PB   := cd ansible && ansible-playbook     # Ansible de la VM (pipx)
+PB   := cd ansible && ansible-playbook     
  
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf provision checkup cli
  
@@ -25,9 +25,16 @@ mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
 	$(PB) 02-mpbgp.yml
 vrf:  ## Playbook 3 : VRF + PE–CE + CE
 	$(PB) 03-vrf.yml
-provision:  ## Les 3 playbooks d'affilée
-	$(PB) site.yml
- 
-# ---- Démo
+	
+render:  ## Rendu d'un gabarit sans appliquer : make render N=pe1 (POUR J4)
+	$(PB) 04-rendu.yml -l $(N)
+
+plan:  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
+	$(PB) 00-collections.yml -l $(N) --check --diff
+
+collections:
+	$(PB) 00-collections.yml
+
+# ---- CLI pour la démo || Doit être up avant
 cli:  ## CLI d'un nœud : make cli N=p1
 	docker exec -it $(N) Cli
