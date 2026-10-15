@@ -42,10 +42,10 @@ Les deux clients utilisent les **mêmes LAN** : seule la VRF les sépare.
 
 | Plan d'adressage | Plage |
 |---|---|
-| Loopbacks du cœur | `10.0.0.x/32` (stockées **sans masque** dans `host_vars`) |
+| Loopbacks du cœur | `10.0.0.x/32` (sans masque dans les variables Ansible) |
 | Liens du cœur | `10.10.0.x/31` |
 | Liens PE–CE | `172.21.0.x/31` |
-| AS cœur / AS des CE | `65000` / un AS par CE (`asn` dans `host_vars`) |
+| AS cœur / AS des CE | `65000` / un AS par CE (contexte local du CE dans Nautobot) |
 
 ## Démarrage
 
@@ -75,9 +75,10 @@ make nautobot-up   # démarre Nautobot sur la VM tools
 | `tools-status` | Conteneurs qui tournent sur la VM tools |
 | `nautobot-up` / `nautobot-down` | Démarre / arrête Nautobot sur la VM tools |
 | `nautobot-tasks` | Liste les commandes `invoke` disponibles |
-| `nautobot-sync` | Alimente Nautobot : 13 équipements, clients (VRF, namespaces), interfaces et IP |
+| `nautobot-sync` | Amorçage : pousse les `host_vars` dans Nautobot (13 équipements, clients, interfaces, IP, câbles) |
 | `nautobot-devices` | Liste les équipements présents dans Nautobot |
-| `nautobot-ipam` | Liste les IP par namespace |
+| `nautobot-ipam` | Liste les IP par namespace (même LAN chez les deux clients) |
+| `sot-pull` | Lit Nautobot → `ansible/sot/host_vars/`. Lancé automatiquement avant `run`, `plan`, `checkup`, `closedness` |
 
 ## Vérifier
 
@@ -90,7 +91,7 @@ make nautobot-up   # démarre Nautobot sur la VM tools
 
 **`make closedness`** : prouve l'isolation. Comme les LAN sont identiques, on ne peut pas
 chercher « le LAN de l'autre client ». On pose à la place un **canari**, une loopback
-`10.255.<client>.x` propre à chaque client (variable `canary` dans `host_vars` des CE),
+`10.255.<client>.x` propre à chaque client (variable `canary`, contexte local des CE dans Nautobot),
 puis on vérifie qu'il n'apparaît que dans la VRF de son client. Il est retiré après le test,
 même en cas d'échec.
 
@@ -106,17 +107,34 @@ même en cas d'échec.
 - Vérifier : `curl -s -o /dev/null -w "%{http_code}\n" http://10.200.4.68:8080/health/` → `200`.
 - **Ne jamais lancer `invoke destroy`** : il supprime les volumes, donc la base.
 
+## Nautobot, source de vérité
+
+Les données **par équipement** (loopback, interfaces, raccordements, AS, canari…) vivent dans Nautobot.
+Chaque `make run` / `plan` / `checkup` commence par `make sot-pull`, qui les relit et fabrique
+`ansible/sot/host_vars/` (ignoré par git). Ansible les charge via `ansible/sot/hosts.yml`, déclaré dans `ansible.cfg`.
+
+| Je veux… | Je fais |
+|---|---|
+| changer une donnée d'équipement | la modifier dans Nautobot (web ou API), puis `make plan N=<nœud>` et `make run` |
+| changer une règle réseau (AS du cœur, RT d'un client, RR) | `group_vars/all/network.yml` dans git |
+| voir ce que lit Ansible | `ansible/sot/host_vars/<nœud>.yml` après `make sot-pull` |
+
+Nautobot injoignable = `make run` refuse de partir (pas de config sans données).
+Historique : jusqu'au tag `sot-phase2`, les données étaient dans `ansible/host_vars/` (git).
+
 ## Où modifier quoi
 
 ```
 ansible/
   group_vars/all/   données du réseau : AS du cœur, tenants (id, RT), RR
-  host_vars/        données par équipement : loopback, raccordements, uplink, lan, asn, tenant
+  sot/hosts.yml     inventaire vide : fait charger sot/host_vars/ (fabriqué depuis Nautobot)
   01-coeur.yml  02-mpbgp.yml  03-vrf.yml  run.yml
   100-checkup_escalier.yml      NE PAS MODIFIER (figé par le tag avant-j4)
   200-canary.yml  200-closed_network.yml   test d'étanchéité
   300-nautobot-sync.yml          inventaire → Nautobot, collection networktocode.nautobot (make nautobot-sync)
+  400-sot-pull.yml               Nautobot → sot/host_vars/ (make sot-pull)
+  templates/host_vars.yml.j2     gabarit des host_vars régénérés
 ```
 
-Ajouter un site : créer son `host_vars/`, vérifier que `tenant` porte **le nom de la VRF**,
-rejouer `make run`, puis `make checkup`.
+Ajouter un site : créer le CE, son poste, leurs interfaces, IP et câbles dans Nautobot
+(contexte local du CE : `asn`, `canary`), rattacher le CE au bon client, puis `make run` et `make checkup`.

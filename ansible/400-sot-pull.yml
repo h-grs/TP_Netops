@@ -1,0 +1,89 @@
+# =============================================================================
+#  Nautobot → host_vars                                               make sot-pull
+#  Lit Nautobot (une requête GraphQL) et fabrique les host_vars dans ansible/sot/host_vars/.
+#  Ansible les charge grâce à ansible/sot/hosts.yml, déclaré dans ansible.cfg.
+#
+#  Phase 2 (ansible/host_vars/ existe)   : compare donnée par donnée, échoue au moindre écart.
+#  Phase 3 (ansible/host_vars/ supprimé) : Nautobot fait foi ; lancé avant chaque make run/plan/checkup.
+#  N'écrit jamais dans ansible/host_vars/.
+# =============================================================================
+- name: Nautobot → variables des équipements
+  hosts: localhost
+  gather_facts: false
+  vars:
+    nb_url: http://10.200.4.68:8080
+    nb_token: "{{ lookup('env', 'NAUTOBOT_TOKEN') }}"
+    sortie: "{{ playbook_dir }}/sot/host_vars"
+    manuels: "{{ playbook_dir }}/host_vars"
+    attendus: "{{ groups['p'] + groups['pe'] + groups['ce'] }}"
+    # "Client 1" → VRFA : le contrat host_vars parle en clés de tenants, Nautobot en noms
+    vrf_du_client: "{{ dict(tenants.values() | map(attribute='nom') | zip(tenants.keys())) }}"
+    requete: |
+      query {
+        devices(location: "Lab G4") {
+          name
+          role { name }
+          tenant { name }
+          local_config_context_data
+          interfaces {
+            name
+            vrf { name }
+            ip_addresses { address }
+            connected_interface { name device { name role { name } } }
+          }
+        }
+      }
+  tasks:
+    - name: Jeton présent ?
+      ansible.builtin.assert:
+        that: nb_token | length > 0
+        fail_msg: "NAUTOBOT_TOKEN vide : lancer via make sot-pull"
+        quiet: true
+
+    - name: Tout le lab en une requête GraphQL
+      networktocode.nautobot.graphql_info: {url: "{{ nb_url }}", token: "{{ nb_token }}", query: "{{ requete }}"}
+      register: gql
+
+    - name: Équipements indexés par nom
+      ansible.builtin.set_fact:
+        tous: "{{ dict(gql.data.devices | map(attribute='name') | zip(gql.data.devices)) }}"
+
+    # Sans ce contrôle, un nœud absent de Nautobot partirait en config sans variables
+    - name: Chaque nœud de l'inventaire existe dans Nautobot
+      ansible.builtin.assert:
+        that: attendus | difference(tous.keys()) | length == 0
+        fail_msg: "Absents de Nautobot : {{ attendus | difference(tous.keys()) | join(', ') }}"
+        quiet: true
+
+    # Repartir de zéro : un équipement retiré de Nautobot ne doit pas laisser un vieux fichier
+    - name: Dossier de sortie vidé puis recréé (ignoré par git)
+      ansible.builtin.file: {path: "{{ sortie }}", state: "{{ item }}", mode: "0755"}
+      loop: [absent, directory]
+
+    - name: host_vars fabriqués depuis Nautobot (P, PE, CE ; les postes n'en ont pas)
+      ansible.builtin.template:
+        src: templates/host_vars.yml.j2
+        dest: "{{ sortie }}/{{ d.name }}.yml"
+        mode: "0644"
+      loop: "{{ gql.data.devices | rejectattr('role.name', 'eq', 'Poste') | list }}"
+      loop_control: {loop_var: d, label: "{{ d.name }}"}
+
+    # ---- Phase 2 seulement : tant que les host_vars écrits à la main existent ----------------
+    # Comparaison des DONNÉES (pas du texte) : les commentaires ne comptent pas
+    - name: Comparaison avec ansible/host_vars (phase 2)
+      when:
+        - manuels is directory
+        - (lookup('file', manuels ~ '/' ~ item ~ '.yml') | from_yaml) != (lookup('file', sortie ~ '/' ~ item ~ '.yml') | from_yaml)
+      ansible.builtin.set_fact:
+        ecarts: "{{ ecarts | default([]) + [item] }}"
+      loop: "{{ attendus }}"
+
+    - name: Verdict
+      ansible.builtin.assert:
+        that: ecarts | default([]) | length == 0
+        success_msg: >-
+          {{ 'Nautobot contient tout : les ' ~ attendus | length ~ ' host_vars sont identiques' if manuels is directory
+             else 'Nautobot fait foi : ' ~ attendus | length ~ ' host_vars fabriqués dans ansible/sot/host_vars/' }}
+        fail_msg: >-
+          Écart sur {{ ecarts | default([]) | join(', ') }}. Voir :
+          {% for n in ecarts | default([]) %}diff -u ansible/host_vars/{{ n }}.yml ansible/sot/host_vars/{{ n }}.yml{{ ' ; ' if not loop.last }}{% endfor %}

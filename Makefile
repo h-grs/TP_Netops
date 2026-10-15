@@ -6,7 +6,7 @@ SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
-        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull
 
 help:  ## Liste des cibles
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -23,24 +23,24 @@ inspect:  ## État des nœuds et IP de management
 deps:  ## Dépendances (une seule fois) : netaddr + pynautobot dans l'Ansible pipx, collections
 	pipx inject ansible netaddr pynautobot
 	ansible-galaxy collection install -r ansible/requirements.yml
-coeur:  ## Playbook 1 : OSPF + MPLS/LDP
+coeur: sot-pull  ## Playbook 1 : OSPF + MPLS/LDP
 	$(PB) 01-coeur.yml
-mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
+mpbgp: sot-pull  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
 	$(PB) 02-mpbgp.yml
-vrf:  ## Playbook 3 : VRF + PE–CE + CE
+vrf: sot-pull  ## Playbook 3 : VRF + PE–CE + CE
 	$(PB) 03-vrf.yml
 
-checkup:  ## Checkup en escalier (OSPF/LDP, VPNv4, eBGP, routes, ping des postes)
+checkup: sot-pull  ## Checkup en escalier (OSPF/LDP, VPNv4, eBGP, routes, ping des postes)
 	$(PB) 100-checkup_escalier.yml
 
-run:  ## Applique tout (les 3 playbooks d'affilée)
+run: sot-pull  ## Applique tout (les 3 playbooks d'affilée)
 	$(PB) run.yml
 
-plan:  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
+plan: sot-pull  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
 	@test -n "$(N)" || { echo "Usage : make plan N=pe1"; exit 1; }
 	$(PB) run.yml -l $(N) --check --diff
 
-closedness:  ## Test d'étanchéité (pose le canari, teste, le retire)
+closedness: sot-pull  ## Test d'étanchéité (pose le canari, teste, le retire)
 	($(PB) 200-canary.yml -e etat=on)
 	($(PB) 200-closed_network.yml); r=$$?; ($(PB) 200-canary.yml -e etat=off); exit $$r
 
@@ -58,9 +58,13 @@ nautobot-up:  ## Démarre Nautobot sur la VM tools
 nautobot-down:  ## Arrête Nautobot sur la VM tools
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke stop"'
 
-nautobot-sync:  ## Alimente Nautobot depuis l'inventaire : équipements, clients, interfaces, IP
+nautobot-sync:  ## Amorçage : pousse les host_vars dans Nautobot (inutile une fois Nautobot source de vérité)
 	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \
 	$(PB) 300-nautobot-sync.yml
+
+sot-pull:  ## Lit Nautobot → ansible/sot/host_vars/ (lancé avant run/plan/checkup ; compare à host_vars/ s'il existe)
+	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \
+	$(PB) 400-sot-pull.yml
 
 nautobot-devices:  ## Liste les équipements présents dans Nautobot (nom, rôle, client)
 	@TOKEN=$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env'); \
