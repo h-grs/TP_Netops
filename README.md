@@ -126,7 +126,7 @@ Secours : `make run OFFLINE=1` (idem `plan`, `checkup`…) rejoue avec la **dern
 (`ansible/sot/host_vars/`, conservée tant qu'un `sot-pull` n'a pas réussi). Sauvegarde : `make nautobot-backup`.
 Historique : jusqu'au tag `sot-phase2`, les données étaient dans `ansible/host_vars/` (git).
 
-## Jalons → preuves
+## Jalons
 
 | Jalon | Preuve | Commande |
 |---|---|---|
