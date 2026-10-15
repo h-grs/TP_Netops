@@ -1,0 +1,40 @@
+# =============================================================================
+#  Observabilité — VM Tools : O2 (Prometheus) + O3 (Grafana)
+#  Projet Compose « netops-obs », séparé de nautobot-docker-compose (autre dossier, autre nom).
+#  Versions ÉPINGLÉES : latest interdit (conséquence de J3).
+#  Lancé depuis la VM Lab : make o2 / make o3 (SSH + git pull, puis docker compose ici).
+# =============================================================================
+name: netops-obs
+
+services:
+  prometheus:                                  # O2 — modèle pull : va chercher l'endpoint de gnmic
+    image: prom/prometheus:v3.14.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle                 # make o2 recharge prometheus.yml sans redémarrer
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:                                     # O3 — tout est provisionné par fichier, aucun clic
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    env_file:                                  # GF_SECURITY_ADMIN_PASSWORD (jamais commité)
+      - path: .env
+        required: false                        # sans .env : make o3 refuse de démarrer Grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports: ["3000:3000"]
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus]
+
+volumes:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,12 @@
+# O2 — Prometheus collecte l'endpoint exposé par gnmic (O1) sur la VM Lab
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: gnmic
+    static_configs:
+      - targets: ["10.200.4.120:9804"]        # VM Lab : gnmic, sortie Prometheus
+    metric_relabel_configs:
+      # étiquette lisible dans Grafana : « interface » (gnmic produit « interface_name »)
+      - source_labels: [interface_name]
+        target_label: interface
