@@ -6,7 +6,7 @@ SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
-        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull nautobot-backup
 
 help:  ## Liste des cibles
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -78,3 +78,6 @@ nautobot-ipam:  ## Liste les IP Nautobot par namespace (même LAN chez les deux 
 
 nautobot-tasks:  ## Liste les commandes invoke disponibles
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke --list"'
+
+nautobot-backup:  ## Sauvegarde la base Nautobot sur la VM tools (~/nautobot-backups/<date>.sql)
+	$(SSH) 'db=$$(docker ps -q --filter label=com.docker.compose.service=db | head -1); mkdir -p ~/nautobot-backups; f=~/nautobot-backups/$$(date +%F-%H%M).sql; docker exec "$$db" sh -c '"'"'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"'"'"' > "$$f.tmp" && test -s "$$f.tmp" && mv "$$f.tmp" "$$f" && ls -lh "$$f"'
