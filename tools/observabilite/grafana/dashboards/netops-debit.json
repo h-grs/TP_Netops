@@ -1,19 +1,22 @@
 {
   "uid": "netops-debit",
   "title": "NetOps — Débit des interfaces",
+  "description": "O3 : débit par équipement et par interface, pour les expériences de chemin et de panne.",
   "tags": [
     "netops",
-    "mpls"
+    "gnmi",
+    "O3"
   ],
+  "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "editable": false,
-  "refresh": "15s",
+  "refresh": "10s",
   "time": {
     "from": "now-30m",
     "to": "now"
   },
-  "timezone": "browser",
+  "graphTooltip": 1,
   "templating": {
     "list": [
       {
@@ -56,6 +59,7 @@
         "refresh": 2,
         "includeAll": true,
         "multi": true,
+        "allValue": "Ethernet.*",
         "current": {
           "selected": true,
           "text": "All",
@@ -65,21 +69,36 @@
       }
     ]
   },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
-      "id": 1,
       "type": "timeseries",
       "title": "Débit entrant (bit/s) — rate(octets reçus) × 8",
+      "description": "Légende à droite, triée par maximum : les interfaces traversées par le trafic de test sont en tête.",
+      "id": 1,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 10,
-        "w": 12,
+        "h": 13,
+        "w": 24,
         "x": 0,
         "y": 0
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(gnmic_interfaces_interface_state_counters_in_octets{device=~\"$device\", interface=~\"$interface\"}[$__rate_interval]) * 8",
+          "legendFormat": "{{device}} · {{interface}}",
+          "refId": "A"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
@@ -87,7 +106,8 @@
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 5,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -95,43 +115,47 @@
       "options": {
         "legend": {
           "displayMode": "table",
-          "placement": "bottom",
+          "placement": "right",
+          "showLegend": true,
           "calcs": [
             "lastNotNull",
             "max"
-          ]
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "legendFormat": "{{device}} · {{interface}}",
-          "expr": "rate(gnmic_interfaces_interface_state_counters_in_octets{device=~\"$device\",interface=~\"$interface\"}[$__rate_interval]) * 8"
-        }
-      ]
+      }
     },
     {
-      "id": 2,
       "type": "timeseries",
       "title": "Débit sortant (bit/s) — rate(octets émis) × 8",
+      "description": "Même lecture que le débit entrant.",
+      "id": 2,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 0
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 13
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "rate(gnmic_interfaces_interface_state_counters_out_octets{device=~\"$device\", interface=~\"$interface\"}[$__rate_interval]) * 8",
+          "legendFormat": "{{device}} · {{interface}}",
+          "refId": "A"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
@@ -139,7 +163,8 @@
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 5,
-            "showPoints": "never"
+            "showPoints": "never",
+            "spanNulls": false
           }
         },
         "overrides": []
@@ -147,28 +172,20 @@
       "options": {
         "legend": {
           "displayMode": "table",
-          "placement": "bottom",
+          "placement": "right",
+          "showLegend": true,
           "calcs": [
             "lastNotNull",
             "max"
-          ]
+          ],
+          "sortBy": "Max",
+          "sortDesc": true
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "legendFormat": "{{device}} · {{interface}}",
-          "expr": "rate(gnmic_interfaces_interface_state_counters_out_octets{device=~\"$device\",interface=~\"$interface\"}[$__rate_interval]) * 8"
-        }
-      ]
+      }
     }
   ]
 }
