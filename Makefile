@@ -30,9 +30,6 @@ vrf:  ## Playbook 3 : VRF + PE–CE + CE
 
 checkup:  ## Playbook 3 : VRF + PE–CE + CE
 	$(PB) 100-checkup_escalier.yml	
-	
-render:  ## Rendu d'un gabarit sans appliquer : make render N=pe1 (POUR J4)
-	$(PB) 04-rendu.yml -l $(N)
 
 run:  ## Applique tout (les 3 playbooks d'affilée)
 	$(PB) run.yml
