@@ -1,0 +1,367 @@
+# =============================================================================
+#  Branche observabilité — gNMI (EOS) -> gnmic -> Prometheus -> Grafana
+#    O1  gnmic : collecte (service systemd)                  VM Lab   (local)
+#    O2  Prometheus : stockage (Docker Compose)              VM Tools (SSH)
+#    O3  Grafana : visualisation, provisionnée par fichier   VM Tools (SSH)
+#
+#  Tout se lance depuis la VM Lab : O1 en local (plus l'eAPI vers les cEOS),
+#  O2 et O3 en SSH vers la VM Tools (inventaire-vms.yml).
+#  Les cEOS (hôtes + groupes) sont lus dans Nautobot : nautobot_inventaire.yml.
+#  Données : group_vars/all/observabilite.yml · inventaire-vms.yml · observabilite/
+#  Usage   : make o1 | o2 | o3 | obs     (voir le Makefile)
+# =============================================================================
+
+- import_playbook: nautobot_inventaire.yml
+
+# ======================================================================= O1
+- name: "O1 — gNMI activé sur chaque cEOS, via l'eAPI (rien n'est installé sur les équipements)"
+  hosts: arista_ceos
+  tags: [o1]
+  gather_facts: false
+  tasks:
+    - name: Serveur gNMI intégré à EOS, dans la VRF de management (déjà actif par défaut sous containerlab)
+      arista.eos.eos_config:
+        parents:
+          - management api gnmi
+          - transport grpc default
+        lines:
+          - vrf MGMT
+
+- name: "O1 — Les 9 serveurs gNMI répondent, vus depuis la VM Lab"
+  hosts: lab_vm
+  tags: [o1]
+  gather_facts: false
+  tasks:
+    - name: L'inventaire containerlab est chargé (cibles gNMI)
+      ansible.builtin.assert:
+        that: groups['arista_ceos'] | default([]) | length == nb_noeuds | int
+        fail_msg: "Il faut {{ nb_noeuds }} nœuds arista_ceos (inventaire Nautobot : make nautobot-sync)."
+        quiet: true
+
+    - name: Les noms des cEOS se résolvent sur la VM Lab (/etc/hosts tenu par containerlab)
+      ansible.builtin.command: "getent hosts {{ item }}"
+      loop: "{{ groups['arista_ceos'] | sort }}"
+      register: noms
+      changed_when: false
+      failed_when: false
+
+    - name: Aucun nom introuvable
+      ansible.builtin.assert:
+        that: noms.results | rejectattr('rc', 'equalto', 0) | list | length == 0
+        fail_msg: "Noms non résolus : {{ noms.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}. Lab déployé ? (make deploy)"
+        quiet: true
+
+    - name: "Port gNMI ouvert sur chaque cEOS, vu depuis la VM Lab"
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[item].ansible_host }}"
+        port: "{{ gnmi_port }}"
+        timeout: 120
+      loop: "{{ groups['arista_ceos'] | sort }}"
+
+- name: "O1 — gnmic : fichier de config versionné + service systemd"
+  hosts: lab_vm
+  tags: [o1]
+  gather_facts: true
+  gather_subset: [min]
+  vars:
+    gnmic_dir: "/opt/gnmic/{{ gnmic_version }}"
+  handlers:
+    - name: Redémarrer gnmic
+      ansible.builtin.systemd_service:
+        name: gnmic
+        state: restarted
+        daemon_reload: true
+  tasks:
+    - name: Architecture prévue (x86_64 ou aarch64)
+      ansible.builtin.assert:
+        that: ansible_architecture in gnmic_sha256
+        fail_msg: "Architecture {{ ansible_architecture }} non prévue : ajouter son SHA-256 dans gnmic_sha256."
+        quiet: true
+
+    - name: Groupe système gnmic
+      ansible.builtin.group:
+        name: gnmic
+        system: true
+
+    - name: Utilisateur système gnmic
+      ansible.builtin.user:
+        name: gnmic
+        group: gnmic
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Répertoires (binaire versionné, configuration)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ gnmic_dir }}", group: root, mode: "0755" }
+        - { path: /etc/gnmic, group: gnmic, mode: "0750" }
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: "Télécharger gnmic {{ gnmic_version }} (somme SHA-256 vérifiée)"
+      ansible.builtin.get_url:
+        url: "https://github.com/openconfig/gnmic/releases/download/v{{ gnmic_version }}/gnmic_{{ gnmic_version }}_Linux_{{ ansible_architecture }}.tar.gz"
+        dest: "{{ gnmic_dir }}/gnmic.tar.gz"
+        checksum: "sha256:{{ gnmic_sha256[ansible_architecture] }}"
+        mode: "0644"
+
+    - name: Extraire le binaire
+      ansible.builtin.unarchive:
+        src: "{{ gnmic_dir }}/gnmic.tar.gz"
+        dest: "{{ gnmic_dir }}"
+        remote_src: true
+        creates: "{{ gnmic_dir }}/gnmic"
+      notify: Redémarrer gnmic
+
+    - name: Lien /usr/local/bin/gnmic vers la version épinglée
+      ansible.builtin.file:
+        src: "{{ gnmic_dir }}/gnmic"
+        dest: /usr/local/bin/gnmic
+        state: link
+      notify: Redémarrer gnmic
+
+    - name: "Configuration gnmic (source de vérité : ce fichier, pas une commande)"
+      ansible.builtin.template:
+        src: observabilite/templates/gnmic.yaml.j2
+        dest: /etc/gnmic/gnmic.yaml
+        owner: root
+        group: gnmic
+        mode: "0640"
+      notify: Redémarrer gnmic
+
+    - name: Unité systemd
+      ansible.builtin.template:
+        src: observabilite/templates/gnmic.service.j2
+        dest: /etc/systemd/system/gnmic.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Redémarrer gnmic
+
+    - name: Appliquer les changements avant de tester
+      ansible.builtin.meta: flush_handlers
+
+    - name: Service gnmic actif et activé au démarrage
+      ansible.builtin.systemd_service:
+        name: gnmic
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: "Le port {{ gnmic_prom_port }} écoute"
+      ansible.builtin.wait_for:
+        port: "{{ gnmic_prom_port }}"
+        timeout: 60
+
+    - name: Les 9 nœuds apparaissent dans l'endpoint (étiquette device)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ gnmic_prom_port }}/metrics"
+        return_content: true
+      register: gnmic_metrics
+      until: >-
+        (gnmic_metrics.content | regex_findall('device="([^"]+)"') | unique | length)
+        == (groups['arista_ceos'] | length)
+      retries: 18
+      delay: 5
+      changed_when: false
+
+    - name: Journaux du service (journalctl -u gnmic)
+      ansible.builtin.command: journalctl -u gnmic --no-pager -n 10
+      register: gnmic_journal
+      changed_when: false
+
+    - name: Dernières lignes du journal
+      ansible.builtin.debug:
+        var: gnmic_journal.stdout_lines
+
+# ======================================================================= O2
+- name: "O2 — Prometheus (Docker Compose, projet séparé) sur la VM Tools (en SSH depuis la VM Lab)"
+  hosts: tools_vm
+  tags: [o2]
+  gather_facts: false
+  vars:
+    lab_vm_address: "{{ lab_vm_ip }}"
+    prom_dir: "{{ obs_dir }}/prometheus"
+  handlers:
+    - name: Redémarrer Prometheus
+      community.docker.docker_compose_v2:
+        project_src: "{{ prom_dir }}"
+        project_name: netops-prometheus
+        state: restarted
+  tasks:
+    - name: LAB_VM_IP renseignée (cible du scrape)
+      ansible.builtin.assert:
+        that: lab_vm_address | length > 0
+        fail_msg: "Exporter LAB_VM_IP = IP de la VM Lab, telle que la voit la VM Tools."
+        quiet: true
+
+    - name: Docker Compose disponible
+      ansible.builtin.command: docker compose version
+      changed_when: false
+
+    - name: "Le port {{ gnmic_prom_port }} de la VM Lab traverse bien jusqu'à la VM Tools"
+      ansible.builtin.wait_for:
+        host: "{{ lab_vm_address }}"
+        port: "{{ gnmic_prom_port }}"
+        timeout: 15
+
+    - name: Dossier du projet Prometheus
+      ansible.builtin.file:
+        path: "{{ prom_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: prometheus.yml (cible = gnmic)
+      ansible.builtin.template:
+        src: observabilite/templates/prometheus.yml.j2
+        dest: "{{ prom_dir }}/prometheus.yml"
+        mode: "0644"
+      notify: Redémarrer Prometheus
+
+    - name: docker-compose.yml (image épinglée)
+      ansible.builtin.template:
+        src: observabilite/templates/prometheus-compose.yml.j2
+        dest: "{{ prom_dir }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Projet netops-prometheus démarré
+      community.docker.docker_compose_v2:
+        project_src: "{{ prom_dir }}"
+        project_name: netops-prometheus
+        state: present
+
+    - name: Appliquer un éventuel changement de configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Prometheus prêt
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/-/ready"
+      register: prom_ready
+      until: prom_ready.status == 200
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: "La cible gnmic est UP (up{job=\"gnmic\"} = 1)"
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/query?query={{ 'up{job=\"gnmic\"}' | urlencode }}"
+        return_content: true
+      register: prom_up
+      until: >-
+        (prom_up.json.data.result | length) > 0
+        and prom_up.json.data.result[0].value[1] == '1'
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Les 9 nœuds sont stockés dans Prometheus
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/query?query={{ q | urlencode }}"
+        return_content: true
+      vars:
+        q: "count(count by (device) (gnmic_interfaces_interface_state_counters_in_octets))"
+      register: prom_devices
+      until: >-
+        (prom_devices.json.data.result | length) > 0
+        and (prom_devices.json.data.result[0].value[1] | int) == (nb_noeuds | int)
+      retries: 12
+      delay: 5
+      changed_when: false
+
+# ======================================================================= O3
+- name: "O3 — Grafana (source de données et tableau de bord provisionnés par fichier)"
+  hosts: tools_vm
+  tags: [o3]
+  gather_facts: false
+  vars:
+    graf_dir: "{{ obs_dir }}/grafana"
+  handlers:
+    - name: Redémarrer Grafana
+      community.docker.docker_compose_v2:
+        project_src: "{{ graf_dir }}"
+        project_name: netops-grafana
+        state: restarted
+  tasks:
+    - name: "Le réseau Docker {{ obs_network }} existe (créé par make o2 : lancer O2 avant O3)"
+      ansible.builtin.command: docker network inspect {{ obs_network }}
+      register: net_check
+      changed_when: false
+      failed_when: net_check.rc != 0
+      # message d'erreur lisible plutôt que « network declared as external, but could not be found »
+
+    - name: Arborescence du projet Grafana
+      ansible.builtin.file:
+        path: "{{ graf_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [provisioning/datasources, provisioning/dashboards, dashboards]
+
+    - name: Source de données Prometheus (fichier)
+      ansible.builtin.template:
+        src: observabilite/templates/grafana-datasource.yml.j2
+        dest: "{{ graf_dir }}/provisioning/datasources/prometheus.yml"
+        mode: "0644"
+      notify: Redémarrer Grafana
+
+    - name: Fournisseur de tableaux de bord (fichier)
+      ansible.builtin.template:
+        src: observabilite/templates/grafana-dashboards.yml.j2
+        dest: "{{ graf_dir }}/provisioning/dashboards/netops.yml"
+        mode: "0644"
+      notify: Redémarrer Grafana
+
+    - name: Tableau de bord (JSON versionné, relu par Grafana toutes les 30 s)
+      ansible.builtin.copy:
+        src: observabilite/dashboards/netops-debit.json
+        dest: "{{ graf_dir }}/dashboards/netops-debit.json"
+        mode: "0644"
+
+    - name: docker-compose.yml (image épinglée)
+      ansible.builtin.template:
+        src: observabilite/templates/grafana-compose.yml.j2
+        dest: "{{ graf_dir }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Projet netops-grafana démarré
+      community.docker.docker_compose_v2:
+        project_src: "{{ graf_dir }}"
+        project_name: netops-grafana
+        state: present
+
+    - name: Appliquer un éventuel changement de configuration avant de tester
+      ansible.builtin.meta: flush_handlers
+
+    - name: Grafana en bonne santé
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_port }}/api/health"
+      register: graf_health
+      until: graf_health.status == 200
+      retries: 18
+      delay: 5
+      changed_when: false
+
+    - name: Source de données provisionnée, sans un clic
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_port }}/api/datasources/uid/prometheus"
+        url_username: "{{ grafana_admin_user }}"
+        url_password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+      changed_when: false
+
+    - name: Tableau de bord provisionné, sans un clic
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_port }}/api/dashboards/uid/netops-debit"
+        url_username: "{{ grafana_admin_user }}"
+        url_password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+      register: graf_dash
+      until: graf_dash.status == 200
+      retries: 6
+      delay: 5
+      changed_when: false

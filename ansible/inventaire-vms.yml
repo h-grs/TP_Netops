@@ -1,0 +1,28 @@
+# =============================================================================
+#  Les 2 VM de la branche observabilité. Tout est lancé DEPUIS la VM Lab.
+#    lab-vm    la VM Lab (containerlab) : connexion locale. Les cEOS (hôtes + groupes)
+#              viennent de Nautobot : nautobot_inventaire.yml.
+#    tools-vm  la VM Tools : connexion SSH (clé), Prometheus et Grafana en Docker Compose.
+#
+#  Variables d'environnement (posées par le Makefile à partir de TOOLS) :
+#    TOOLS_VM_IP     IP de la VM Tools, vue depuis la VM Lab (cible du SSH)
+#    TOOLS_VM_USER   utilisateur SSH sur la VM Tools (sinon l'utilisateur courant)
+#    LAB_VM_IP       IP de la VM Lab, vue depuis la VM Tools (cible du scrape :9804)
+# =============================================================================
+all:
+  children:
+    lab_vm:
+      hosts:
+        lab-vm:
+          ansible_connection: local
+          ansible_become: true
+    tools_vm:
+      hosts:
+        tools-vm:
+          ansible_connection: ssh
+          ansible_host: "{{ lookup('ansible.builtin.env', 'TOOLS_VM_IP') }}"
+          ansible_user: "{{ lookup('ansible.builtin.env', 'TOOLS_VM_USER') | default(lookup('ansible.builtin.env', 'USER'), true) }}"
+          ansible_become: true
+          ansible_ssh_common_args: "-o BatchMode=yes"   # jamais d'invite : échec immédiat et lisible
+  vars:
+    lab_vm_ip: "{{ lookup('ansible.builtin.env', 'LAB_VM_IP') }}"

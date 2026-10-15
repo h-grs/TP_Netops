@@ -1,0 +1,40 @@
+# {{ ansible_managed }}
+# gnmic {{ gnmic_version }} — abonnement gNMI (modèle push) -> endpoint Prometheus :{{ gnmic_prom_port }}
+username: {{ gnmi_username }}
+password: {{ gnmi_password }}
+insecure: true                  # gNMI cEOS en clair (port {{ gnmi_port }})
+encoding: json_ietf
+log: true                       # journaux sur stderr -> journald (journalctl -u gnmic)
+
+targets:
+{% for h in groups['arista_ceos'] | sort %}
+  {{ h }}:
+    address: {{ hostvars[h].ansible_host }}:{{ gnmi_port }}
+    event-tags:
+      device: {{ h }}           # étiquette « device » = nom du nœud, utilisée par Grafana
+{% endfor %}
+
+subscriptions:
+  interfaces-counters:
+    paths:
+      - /interfaces/interface/state/counters
+    mode: stream
+    stream-mode: sample
+    sample-interval: {{ gnmic_sample_interval }}
+
+processors:
+  counters-to-int:
+    event-convert:
+      value-names:
+        - ".*counters.*"
+      type: int
+
+outputs:
+  prometheus:
+    type: prometheus
+    listen: ":{{ gnmic_prom_port }}"
+    path: /metrics
+    expiration: 60s
+    metric-prefix: gnmic
+    event-processors:
+      - counters-to-int

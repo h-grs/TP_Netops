@@ -1,0 +1,33 @@
+# =============================================================================
+#  O3 — Expérience 1 : test de panne, déclenché depuis un fichier (pas à la main).
+#    make panne   [N=p2 I=Ethernet2]    coupe l'interface   (shutdown)
+#    make reprise [N=p2 I=Ethernet2]    la rétablit         (no shutdown)
+#  Défauts : p2 Ethernet2 (lien p2 ↔ pe2, la branche de Bordeaux).
+#  L'heure UTC de l'action est affichée : c'est « l'heure de coupure » à reporter
+#  dans docs/O3_experiences.md.
+# =============================================================================
+- import_playbook: nautobot_inventaire.yml
+
+- name: "Expérience de panne — {{ etat | default('?') }} de {{ noeud | default('p2') }} {{ interface | default('Ethernet2') }}"
+  hosts: "{{ noeud | default('p2') }}"
+  gather_facts: false
+  vars:
+    interface: Ethernet2
+    etat: down            # down = coupure, up = rétablissement
+  tasks:
+    - name: Valeur de « etat » valide
+      ansible.builtin.assert:
+        that: etat in ['down', 'up']
+        fail_msg: "etat doit valoir down ou up."
+        quiet: true
+      run_once: true
+
+    - name: "{{ 'Coupure' if etat == 'down' else 'Rétablissement' }} de l'interface"
+      arista.eos.eos_config:
+        parents: "interface {{ interface }}"
+        lines:
+          - "{{ 'shutdown' if etat == 'down' else 'no shutdown' }}"
+
+    - name: Heure de l'action (UTC)
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} {{ interface }} {{ etat }} à {{ now(utc=true).strftime('%H:%M:%S') }} UTC"

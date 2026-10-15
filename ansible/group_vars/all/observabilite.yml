@@ -1,0 +1,35 @@
+# =============================================================================
+#  Branche observabilité (O1 · O2 · O3). Versions ÉPINGLÉES (« latest » interdit, cf. J3).
+# =============================================================================
+#  gNMI (dans EOS) -> gnmic (O1, VM Lab) -> Prometheus (O2, VM Tools) -> Grafana (O3, VM Tools)
+
+# ---- O1 : gnmic (binaire + service systemd sur la VM Lab) --------------------
+gnmic_version: "0.49.0"
+# SHA-256 publiés avec la release GitHub openconfig/gnmic v0.49.0 (un par architecture)
+gnmic_sha256:
+  x86_64:  "c0b0c59a6956a9f23878063e91900e18093e7306ccc511f0e9047a890b61c7ec"
+  aarch64: "14f7056b233f48107df6bbdd48b47a6a3f45e06af8790ad86bff08d73c6bb535"
+nb_noeuds: 9                    # cEOS attendus dans Nautobot (p1-2, pe1-3, 4 CE)
+gnmic_prom_port: 9804           # endpoint exposé par gnmic, scrapé par Prometheus (VM Tools)
+gnmic_sample_interval: 10s      # l'équipement pousse un échantillon toutes les 10 s
+
+# ---- Inventaire : Nautobot (VM tools), alimenté par `make nautobot-sync` ----------
+nautobot_url: "http://{{ lookup('ansible.builtin.env', 'TOOLS_VM_IP') }}:8080"
+nautobot_site: "Lab G4"                  # emplacement Nautobot des 9 cEOS
+nautobot_roles: {P: p, PE: pe, CE: ce}   # rôle Nautobot → groupe Ansible
+
+gnmi_port: 6030                 # gNMI cEOS en clair, activé par défaut sous containerlab
+gnmi_username: admin
+gnmi_password: admin            # lab uniquement
+
+# ---- O2 / O3 : Docker Compose sur la VM Tools --------------------------------
+obs_dir: /opt/netops-observabilite        # un dossier PAR projet compose, séparé du reste de la VM
+obs_network: netops-obs                   # réseau docker partagé Prometheus <-> Grafana
+prometheus_image: "prom/prometheus:v3.14.0"
+prometheus_port: 9090
+prometheus_scrape_interval: 15s
+prometheus_retention: 7d
+grafana_image: "grafana/grafana:13.2.3"
+grafana_port: 3000
+grafana_admin_user: admin
+grafana_admin_password: netops-lab-ChangeMe   # lab uniquement : à passer en ansible-vault

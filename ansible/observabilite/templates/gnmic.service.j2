@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+[Unit]
+Description=gnmic — collecteur gNMI vers Prometheus (O1)
+Documentation=https://gnmic.openconfig.net
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gnmic
+Group=gnmic
+ExecStart=/usr/local/bin/gnmic --config /etc/gnmic/gnmic.yaml subscribe
+Restart=on-failure
+RestartSec=5
+# Journalisation : stdout/stderr -> journald, à lire avec « journalctl -u gnmic »
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gnmic
+
+[Install]
+WantedBy=multi-user.target
