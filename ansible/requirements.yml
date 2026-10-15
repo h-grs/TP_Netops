@@ -6,3 +6,6 @@ collections:
     version: ">=6.0.0"
   - name: ansible.utils       # filtres ipaddr 
     version: ">=4.0.0"
+  - name: networktocode.nautobot
+  - name: community.docker    # Docker Compose pour observabilité 
+    version: ">=4.0.0"

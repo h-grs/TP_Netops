@@ -6,7 +6,7 @@ SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
-        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam
 
 help:  ## Liste des cibles
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -20,8 +20,8 @@ inspect:  ## État des nœuds et IP de management
 	$(CLAB) inspect -t $(TOPO)
 
 # ---- J2 : Ansible
-deps:  ## Dépendances (une seule fois) : netaddr dans l'Ansible pipx + collections
-	pipx inject ansible netaddr
+deps:  ## Dépendances (une seule fois) : netaddr + pynautobot dans l'Ansible pipx, collections
+	pipx inject ansible netaddr pynautobot
 	ansible-galaxy collection install -r ansible/requirements.yml
 coeur:  ## Playbook 1 : OSPF + MPLS/LDP
 	$(PB) 01-coeur.yml
@@ -58,9 +58,19 @@ nautobot-up:  ## Démarre Nautobot sur la VM tools
 nautobot-down:  ## Arrête Nautobot sur la VM tools
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke stop"'
 
-nautobot-sync:  ## Alimente Nautobot depuis l'inventaire (jeton lu dans creds.env de la VM tools)
+nautobot-sync:  ## Alimente Nautobot depuis l'inventaire : équipements, clients, interfaces, IP
 	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \
 	$(PB) 300-nautobot-sync.yml
+
+nautobot-devices:  ## Liste les équipements présents dans Nautobot (nom, rôle, client)
+	@TOKEN=$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env'); \
+	curl -s -H "Authorization: Token $$TOKEN" "http://10.200.4.68:8080/api/dcim/devices/?limit=100&depth=1" \
+	| python3 -c "import sys,json; r=json.load(sys.stdin); print(r['count'], 'équipements'); [print(f\"  {d['name']:8} {d['role']['name']:6} {(d['tenant'] or {}).get('name','-')}\") for d in r['results']]"
+
+nautobot-ipam:  ## Liste les IP Nautobot par namespace (même LAN chez les deux clients)
+	@TOKEN=$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env'); \
+	curl -s -H "Authorization: Token $$TOKEN" "http://10.200.4.68:8080/api/ipam/ip-addresses/?limit=200&depth=2" \
+	| python3 -c "import sys,json; r=json.load(sys.stdin); print(r['count'], 'adresses'); [print(f\"  {a['address']:18} {a['parent']['namespace']['name'] if a.get('parent') else '?'}\") for a in sorted(r['results'], key=lambda a: a['address'])]"
 
 nautobot-tasks:  ## Liste les commandes invoke disponibles
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke --list"'

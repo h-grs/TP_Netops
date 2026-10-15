@@ -1,76 +1,248 @@
 # =============================================================================
 #  Alimente Nautobot depuis l'inventaire Ansible                  make nautobot-sync
-#  Sens : host_vars (source) → Nautobot (reflet). Rejouable : ne crée que ce qui manque.
-#  Jeton API : NAUTOBOT_TOKEN dans l'environnement (jamais dans le dépôt).
+#  Sens : host_vars (source) → Nautobot (reflet).
+#  Phases : base + équipements, 1a clients (IPAM), 1b interfaces/IP, 1c câbles + contextes.
+#  Collection networktocode.nautobot (pynautobot) : state: present crée OU corrige,
+#  donc un 2e passage sans changement dans host_vars doit finir en changed=0.
+#  Jeton API : lu par le Makefile dans creds.env de la VM tools (jamais dans le dépôt).
 # =============================================================================
 - name: Nautobot reflète le lab (9 nœuds Arista + 4 postes clients)
   hosts: localhost
   gather_facts: false
   vars:
     nb_url: http://10.200.4.68:8080
-    nb_headers:
-      Authorization: "Token {{ lookup('env', 'NAUTOBOT_TOKEN') }}"
-      Accept: application/json
+    nb_token: "{{ lookup('env', 'NAUTOBOT_TOKEN') }}"
     site: Lab G4
-    actif: {name: Active}
     role_par_groupe: {p: P, pe: PE, ce: CE}
 
-    # Objets de base, dans l'ordre de dépendance
-    base:
-      - {endpoint: dcim/location-types, filtre: "name=Site",
-         body: {name: Site, content_types: [dcim.device]}}
-      - {endpoint: dcim/locations, filtre: "name={{ site }}",
-         body: {name: "{{ site }}", location_type: {name: Site}, status: "{{ actif }}"}}
-      - {endpoint: dcim/manufacturers, filtre: "name=Arista", body: {name: Arista}}
-      - {endpoint: dcim/device-types, filtre: "model=cEOS",
-         body: {model: cEOS, manufacturer: {name: Arista}}}
-      - {endpoint: extras/roles, filtre: "name=P",  body: {name: P,  content_types: [dcim.device]}}
-      - {endpoint: extras/roles, filtre: "name=PE", body: {name: PE, content_types: [dcim.device]}}
-      - {endpoint: extras/roles, filtre: "name=CE", body: {name: CE, content_types: [dcim.device]}}
-      # Postes clients (conteneurs Linux du groupe lc)
-      - {endpoint: dcim/manufacturers, filtre: "name=Linux", body: {name: Linux}}
-      - {endpoint: dcim/device-types, filtre: "model=linux-host",
-         body: {model: linux-host, manufacturer: {name: Linux}}}
-      - {endpoint: extras/roles, filtre: "name=Poste", body: {name: Poste, content_types: [dcim.device]}}
+    # VRF portées par chaque PE, avec le même RD que 03-vrf.yml : <loopback>:<id du client>
+    vrfs_pe: |
+      {% for h in groups['pe'] %}
+      {% for v in hostvars[h].raccordements | map(attribute='vrf') | unique %}
+      - {device: {{ h }}, vrf: {{ v }}, rd: "{{ hostvars[h].loopback }}:{{ tenants[v].id }}"}
+      {% endfor %}
+      {% endfor %}
+
+    # Même chose au format attendu par le module device : {pe1: [{vrf: VRFA}, {vrf: VRFB}], ...}
+    vrfs_par_pe: |
+      {% for h in groups['pe'] %}
+      {{ h }}: [{% for v in hostvars[h].raccordements | map(attribute='vrf') | unique %}{vrf: {{ v }}}{{ '' if loop.last else ', ' }}{% endfor %}]
+      {% endfor %}
+
+    # Toutes les interfaces du lab, calculées depuis host_vars (aucune valeur en dur).
+    # ns = namespace Nautobot : Global pour le cœur, celui du client pour PE–CE et LAN.
+    interfaces_lab: |
+      {% for h in groups['p'] + groups['pe'] %}
+      - {device: {{ h }}, nom: Loopback0, type: virtual, ip: "{{ hostvars[h].loopback }}/32", ns: Global}
+      {% for i in hostvars[h].interfaces_coeur %}
+      - {device: {{ h }}, nom: {{ i.nom }}, type: 1000base-t, ip: "{{ i.ip }}", ns: Global}
+      {% endfor %}
+      {% for r in hostvars[h].raccordements | default([]) %}
+      - {device: {{ h }}, nom: {{ r.nom }}, type: 1000base-t, ip: "{{ r.ip }}", ns: "{{ tenants[r.vrf].nom }}", vrf: {{ r.vrf }}}
+      {% endfor %}
+      {% endfor %}
+      {% for c in groups['ce'] %}
+      {% set ns = tenants[hostvars[c].tenant].nom %}
+      - {device: {{ c }}, nom: {{ hostvars[c].uplink.nom }}, type: 1000base-t, ip: "{{ hostvars[c].uplink.ip }}", ns: "{{ ns }}"}
+      - {device: {{ c }}, nom: {{ hostvars[c].lan.nom }}, type: 1000base-t, ip: "{{ hostvars[c].lan.ip }}", ns: "{{ ns }}"}
+      - {device: {{ hostvars[c].lan.hote }}, nom: eth1, type: 1000base-t, ip: "{{ hostvars[c].lan.hote_ip }}/{{ hostvars[c].lan.ip | ansible.utils.ipaddr('prefix') }}", ns: "{{ ns }}"}
+      {% endfor %}
+
+    # Câbles, déduits de host_vars (cohérents avec les links de netops.clab.yaml).
+    # Cœur : chaque lien est vu des deux côtés (vers:), on ne l'émet qu'une fois (h < voisin).
+    cables_lab: |
+      {% for h in groups['p'] + groups['pe'] %}
+      {% for i in hostvars[h].interfaces_coeur if h < i.vers %}
+      {% set en_face = hostvars[i.vers].interfaces_coeur | selectattr('vers', 'eq', h) | first %}
+      - {a: {device: {{ h }}, name: {{ i.nom }}}, b: {device: {{ i.vers }}, name: {{ en_face.nom }}}}
+      {% endfor %}
+      {% for r in hostvars[h].raccordements | default([]) %}
+      - {a: {device: {{ h }}, name: {{ r.nom }}}, b: {device: {{ r.ce }}, name: {{ hostvars[r.ce].uplink.nom }}}}
+      {% endfor %}
+      {% endfor %}
+      {% for c in groups['ce'] %}
+      - {a: {device: {{ c }}, name: {{ hostvars[c].lan.nom }}}, b: {device: {{ hostvars[c].lan.hote }}, name: eth1}}
+      {% endfor %}
+
+    # Client de chaque poste = client du CE qui le dessert (lan.hote)
+    client_du_poste: |
+      {% for c in groups['ce'] %}
+      {{ hostvars[c].lan.hote }}: "{{ tenants[hostvars[c].tenant].nom }}"
+      {% endfor %}
+
+  # url + token passés une seule fois à tous les modules utilisés
+  module_defaults:
+    networktocode.nautobot.location_type: &nb {url: "{{ nb_url }}", token: "{{ nb_token }}"}
+    networktocode.nautobot.location: *nb
+    networktocode.nautobot.manufacturer: *nb
+    networktocode.nautobot.device_type: *nb
+    networktocode.nautobot.role: *nb
+    networktocode.nautobot.device: *nb
+    networktocode.nautobot.tenant: *nb
+    networktocode.nautobot.namespace: *nb
+    networktocode.nautobot.route_target: *nb
+    networktocode.nautobot.vrf: *nb
+    networktocode.nautobot.prefix: *nb
+    networktocode.nautobot.device_interface: *nb
+    networktocode.nautobot.ip_address: *nb
+    networktocode.nautobot.cable: *nb
+
   tasks:
     - name: Jeton présent ?
       ansible.builtin.assert:
-        that: lookup('env', 'NAUTOBOT_TOKEN') | length > 0
-        fail_msg: "Exporter NAUTOBOT_TOKEN (Nautobot → profil → API Tokens)"
+        that: nb_token | length > 0
+        fail_msg: "NAUTOBOT_TOKEN vide : lancer via make nautobot-sync"
         quiet: true
 
-    - name: Objets de base
-      ansible.builtin.include_tasks: nautobot_ensure.yml
-      loop: "{{ base }}"
-      loop_control: {loop_var: obj, label: "{{ obj.endpoint }} {{ obj.filtre }}"}
+    # ---- Objets de base -------------------------------------------------------
+    - name: Type de lieu Site
+      networktocode.nautobot.location_type: {name: Site, content_types: [dcim.device], state: present}
 
+    - name: Lieu du lab
+      networktocode.nautobot.location: {name: "{{ site }}", location_type: Site, status: Active, state: present}
+
+    - name: Constructeurs
+      networktocode.nautobot.manufacturer: {name: "{{ item }}", state: present}
+      loop: [Arista, Linux]
+
+    - name: Modèles (cEOS pour les routeurs, linux-host pour les postes)
+      networktocode.nautobot.device_type: {model: "{{ item.model }}", manufacturer: "{{ item.fab }}", state: present}
+      loop:
+        - {model: cEOS, fab: Arista}
+        - {model: linux-host, fab: Linux}
+
+    - name: Rôles
+      networktocode.nautobot.role: {name: "{{ item }}", content_types: [dcim.device], state: present}
+      loop: [P, PE, CE, Poste]
+
+    # ---- Phase 1a : un client = tenant + namespace + route target + VRF -------
+    # Avant les équipements : un CE référence son tenant, un PE ses VRF.
+    - name: Tenant de chaque client
+      networktocode.nautobot.tenant: {name: "{{ item.value.nom }}", state: present}
+      loop: "{{ tenants | dict2items }}"
+      loop_control: {label: "{{ item.key }}"}
+
+    - name: Namespace de chaque client (permet le même /24 chez les deux)
+      networktocode.nautobot.namespace:
+        {name: "{{ item.value.nom }}", description: "Plan d'adressage de {{ item.value.nom }}", state: present}
+      loop: "{{ tenants | dict2items }}"
+      loop_control: {label: "{{ item.key }}"}
+
+    - name: Route target de chaque client
+      networktocode.nautobot.route_target: {name: "{{ item.value.rt }}", tenant: "{{ item.value.nom }}", state: present}
+      loop: "{{ tenants | dict2items }}"
+      loop_control: {label: "{{ item.key }}"}
+
+    - name: VRF de chaque client (import/export = sa RT)
+      networktocode.nautobot.vrf:
+        name: "{{ item.key }}"
+        namespace: "{{ item.value.nom }}"
+        tenant: "{{ item.value.nom }}"
+        import_targets: ["{{ item.value.rt }}"]
+        export_targets: ["{{ item.value.rt }}"]
+        state: present
+      loop: "{{ tenants | dict2items }}"
+      loop_control: {label: "{{ item.key }}"}
+
+    - name: LAN des sites dans le namespace de leur client
+      networktocode.nautobot.prefix:
+        prefix: "{{ hostvars[item].lan.ip | ansible.utils.ipaddr('network/prefix') }}"
+        namespace: "{{ tenants[hostvars[item].tenant].nom }}"
+        tenant: "{{ tenants[hostvars[item].tenant].nom }}"
+        status: Active
+        state: present
+      loop: "{{ groups['ce'] }}"
+
+    # ---- Équipements ----------------------------------------------------------
     - name: Un équipement par nœud Arista (nom = nom d'inventaire)
-      ansible.builtin.include_tasks: nautobot_ensure.yml
+      networktocode.nautobot.device:
+        name: "{{ item }}"
+        device_type: cEOS
+        role: "{{ role_par_groupe[['p', 'pe', 'ce'] | select('in', hostvars[item].group_names) | first] }}"
+        location: "{{ site }}"
+        status: Active
+        # PE : ses VRF (replace = Nautobot retire celles qui ne sont plus dans host_vars)
+        vrfs: "{{ {'state': 'replace', 'objects': (vrfs_par_pe | from_yaml)[item]} if est_pe else omit }}"
+        # CE : son client, et ce que Nautobot ne modélise pas (AS, canari) en contexte local
+        tenant: "{{ tenants[hostvars[item].tenant].nom if est_ce else omit }}"
+        local_config_context_data: "{{ {'asn': hostvars[item].asn, 'canary': hostvars[item].canary} if est_ce else omit }}"
+        state: present
+        # Recherche par nom + lieu seulement : par défaut le module cherche aussi par tenant/rôle/modèle,
+        # et changer le tenant créerait alors un doublon au lieu de mettre à jour l'équipement
+        query_params: [name, location]
+      vars:
+        est_pe: "{{ 'pe' in hostvars[item].group_names }}"
+        est_ce: "{{ 'ce' in hostvars[item].group_names }}"
       loop: "{{ groups['p'] + groups['pe'] + groups['ce'] }}"
-      loop_control: {loop_var: noeud, label: "{{ noeud }}"}
-      vars:
-        groupe: "{{ ['p', 'pe', 'ce'] | select('in', hostvars[noeud].group_names) | first }}"
-        obj:
-          endpoint: dcim/devices
-          filtre: "name={{ noeud }}"
-          body:
-            name: "{{ noeud }}"
-            device_type: {model: cEOS}
-            role: {name: "{{ role_par_groupe[groupe] }}"}
-            location: {name: "{{ site }}"}
-            status: "{{ actif }}"
 
-    - name: Un équipement par poste client (groupe lc de l'inventaire containerlab)
-      ansible.builtin.include_tasks: nautobot_ensure.yml
+    - name: Un équipement par poste client (groupe lc de containerlab)
+      networktocode.nautobot.device:
+        name: "{{ item }}"
+        device_type: linux-host
+        role: Poste
+        location: "{{ site }}"
+        tenant: "{{ (client_du_poste | from_yaml)[item] }}"
+        status: Active
+        state: present
+        query_params: [name, location]
       loop: "{{ groups['lc'] | default([]) }}"
-      loop_control: {loop_var: poste, label: "{{ poste }}"}
+
+    # Aucun module ne gère le RD (propre à chaque PE) : on le corrige par l'API, seulement s'il diffère
+    - name: RD de chaque VRF sur son PE
       vars:
-        obj:
-          endpoint: dcim/devices
-          filtre: "name={{ poste }}"
-          body:
-            name: "{{ poste }}"
-            device_type: {model: linux-host}
-            role: {name: Poste}
-            location: {name: "{{ site }}"}
-            status: "{{ actif }}"
+        aff: >-
+          {{ query('networktocode.nautobot.lookup', 'vrf-device-assignments', api_endpoint=nb_url, token=nb_token,
+                   api_filter='vrf=' ~ item.vrf ~ ' device=' ~ item.device) | first }}
+      when: aff.value.rd != item.rd
+      ansible.builtin.uri:
+        url: "{{ nb_url }}/api/ipam/vrf-device-assignments/{{ aff.key }}/"
+        method: PATCH
+        headers: {Authorization: "Token {{ nb_token }}"}
+        body_format: json
+        body: {rd: "{{ item.rd }}"}
+      changed_when: true
+      loop: "{{ vrfs_pe | from_yaml }}"
+      loop_control: {label: "{{ item.device }} {{ item.vrf }} rd {{ item.rd }}"}
+
+    # ---- Phase 1b : adresses puis interfaces ----------------------------------
+    # Une IP doit avoir un préfixe parent dans son namespace
+    - name: Préfixe parent de chaque adresse
+      networktocode.nautobot.prefix:
+        prefix: "{{ item.ip | ansible.utils.ipaddr('network/prefix') }}"
+        namespace: "{{ item.ns }}"
+        status: Active
+        state: present
+      loop: "{{ interfaces_lab | from_yaml }}"
+      loop_control: {label: "{{ item.ip | ansible.utils.ipaddr('network/prefix') }} ({{ item.ns }})"}
+
+    - name: Adresses
+      networktocode.nautobot.ip_address: {address: "{{ item.ip }}", namespace: "{{ item.ns }}", status: Active, state: present}
+      loop: "{{ interfaces_lab | from_yaml }}"
+      loop_control: {label: "{{ item.ip }} ({{ item.ns }})"}
+
+    # L'adresse est rattachée par l'interface elle-même (namespace précisé : même IP chez les deux clients)
+    - name: Interfaces + leur adresse (VRF posée sur les raccordements PE–CE)
+      networktocode.nautobot.device_interface:
+        device: "{{ item.device }}"
+        name: "{{ item.nom }}"
+        type: "{{ item.type }}"
+        status: Active
+        vrf: "{{ item.vrf | default(omit) }}"
+        ip_addresses:
+          state: replace
+          objects: [{ip_address: {address: "{{ item.ip }}", namespace: "{{ item.ns }}"}}]
+        state: present
+      loop: "{{ interfaces_lab | from_yaml }}"
+      loop_control: {label: "{{ item.device }} {{ item.nom }} {{ item.ip }}"}
+
+    # ---- Phase 1c : câblage ---------------------------------------------------
+    - name: Câbles (cœur, PE–CE, CE–poste)
+      networktocode.nautobot.cable:
+        termination_a_type: dcim.interface
+        termination_a: "{{ item.a }}"
+        termination_b_type: dcim.interface
+        termination_b: "{{ item.b }}"
+        status: Connected
+        state: present
+      loop: "{{ cables_lab | from_yaml }}"
+      loop_control: {label: "{{ item.a.device }}:{{ item.a.name }} ↔ {{ item.b.device }}:{{ item.b.name }}"}

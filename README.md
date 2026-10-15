@@ -50,7 +50,7 @@ Les deux clients utilisent les **mêmes LAN** : seule la VRF les sépare.
 ## Démarrage
 
 ```bash
-make deps          # une seule fois : netaddr + collections Ansible
+make deps          # une seule fois : netaddr, pynautobot, collections Ansible
 make deploy        # crée les 13 conteneurs
 make run           # applique tout : cœur, MP-BGP, VRF
 make checkup       # vérifie
@@ -75,8 +75,9 @@ make nautobot-up   # démarre Nautobot sur la VM tools
 | `tools-status` | Conteneurs qui tournent sur la VM tools |
 | `nautobot-up` / `nautobot-down` | Démarre / arrête Nautobot sur la VM tools |
 | `nautobot-tasks` | Liste les commandes `invoke` disponibles |
-| `nautobot-sync` | Alimente Nautobot : 9 nœuds Arista + 4 postes clients |
+| `nautobot-sync` | Alimente Nautobot : 13 équipements, clients (VRF, namespaces), interfaces et IP |
 | `nautobot-devices` | Liste les équipements présents dans Nautobot |
+| `nautobot-ipam` | Liste les IP par namespace |
 
 ## Vérifier
 
@@ -114,18 +115,8 @@ ansible/
   01-coeur.yml  02-mpbgp.yml  03-vrf.yml  run.yml
   100-checkup_escalier.yml      NE PAS MODIFIER (figé par le tag avant-j4)
   200-canary.yml  200-closed_network.yml   test d'étanchéité
-  300-nautobot-sync.yml  nautobot_ensure.yml  inventaire → Nautobot
+  300-nautobot-sync.yml          inventaire → Nautobot, collection networktocode.nautobot (make nautobot-sync)
 ```
 
 Ajouter un site : créer son `host_vars/`, vérifier que `tenant` porte **le nom de la VRF**,
 rejouer `make run`, puis `make checkup`.
-
-Preuve que le checkup n'a pas bougé pendant J4 :
-`git diff avant-j4 HEAD -- ansible/100-checkup_escalier.yml` doit être vide.
-
-## Pièges connus
-
-- Un `tenant` qui ne porte pas le nom de la VRF fait **ignorer le CE en silence** par le
-  checkup : les tests du client concerné semblent passer sans rien prouver.
-- Les commandes `ansible-*` se lancent depuis `ansible/` (le Makefile le fait déjà).
-- Le Makefile exige des **tabulations**, pas des espaces.
