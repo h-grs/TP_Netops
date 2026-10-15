@@ -38,6 +38,10 @@ plan:  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
 collections:
 	$(PB) 00-collections.yml
 
+closedness:  ## Test d'étanchéité (pose le canari, teste, le retire)
+	($(PB) 200-canary.yml -e etat=on)
+	($(PB) 200-closed_network.yml); r=$$?; ($(PB) 200-canary.yml -e etat=off); exit $$r
+
 # ---- CLI pour la démo || Doit être up avant
 cli:  ## CLI d'un nœud : make cli N=p1
 	docker exec -it $(N) Cli

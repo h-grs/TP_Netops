@@ -1,0 +1,26 @@
+- name: Étanchéité — le canari d'un client n'apparaît que dans SA VRF
+  hosts: pe
+  gather_facts: false
+  vars:
+    vrfs_du_pe: "{{ raccordements | map(attribute='vrf') | list }}"
+  tasks:
+    - name: Relevé
+      arista.eos.eos_command:
+        commands: ["show ip route vrf {{ item.0 }} {{ hostvars[item.1].canary }}"]
+      loop: "{{ vrfs_du_pe | product(groups['ce']) | list }}"
+      loop_control:
+        label: "VRF {{ item.0 }} ← canari de {{ item.1 }}"
+      register: r
+
+    - name: Présent chez son client, ABSENT chez l'autre
+      ansible.builtin.assert:
+        that: (canari in res.stdout[0]) == (hostvars[res.item.1].tenant == res.item.0)
+        fail_msg: >-
+          {{ 'MANQUANT' if hostvars[res.item.1].tenant == res.item.0 else 'FUITE' }} :
+          canari de {{ res.item.1 }} ({{ canari }}) dans la VRF {{ res.item.0 }}
+      loop: "{{ r.results }}"
+      loop_control:
+        loop_var: res
+        label: "VRF {{ res.item.0 }} ← {{ res.item.1 }}"
+      vars:
+        canari: "{{ hostvars[res.item.1].canary }}"

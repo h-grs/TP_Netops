@@ -1,0 +1,23 @@
+# Pose (etat=on) ou retire (etat=off) le canari sur les CE.
+- name: Canari du test d'étanchéité
+  hosts: ce
+  gather_facts: false
+  tasks:
+    - name: Pose du canari
+      when: etat | default('on') == 'on'
+      block:
+        - arista.eos.eos_config:
+            parents: interface Loopback1
+            lines: ["ip address {{ canary }}"]
+        - arista.eos.eos_config:
+            parents: "router bgp {{ asn }}"
+            lines: ["network {{ canary }}"]
+
+    - name: Retrait du canari
+      when: etat | default('on') == 'off'
+      block:
+        - arista.eos.eos_config:
+            parents: "router bgp {{ asn }}"
+            lines: ["no network {{ canary }}"]
+        - arista.eos.eos_config:
+            lines: ["no interface Loopback1"]

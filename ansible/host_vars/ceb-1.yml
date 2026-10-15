@@ -4,3 +4,4 @@ asn: 65003
 tenant: VRFB
 uplink: {nom: Ethernet1, ip: 172.21.0.3/31, pe: pe1}
 lan:    {nom: Ethernet2, ip: 192.168.0.1/24, hote: lc2, hote_ip: 192.168.0.2}
+canary: 10.255.2.1/32

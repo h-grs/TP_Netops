@@ -77,3 +77,4 @@
           - "router-id {{ lan.ip | ansible.utils.ipaddr('address') }}"
           - "neighbor {{ uplink.ip | ansible.utils.ipaddr('peer') }} remote-as {{ asn_coeur }}"
           - "network {{ lan.ip | ansible.utils.ipaddr('network/prefix') }}"
+  
