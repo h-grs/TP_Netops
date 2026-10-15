@@ -6,9 +6,16 @@ SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
 # OFFLINE=1 : Nautobot injoignable → on rejoue avec la dernière copie lue (ansible/sot/host_vars/)
 SOT := $(if $(OFFLINE),sot-cache,sot-pull)
+# Observabilité. O1 : Ansible local (inventaire containerlab + VM Lab) ; K=1 si sudo demande un mot de passe.
+#                O2/O3 : Docker Compose sur la VM Tools, fichiers versionnés dans tools/observabilite/ (sparse-checkout)
+OBS      := cd ansible && ansible-playbook -i ../clab-netops/ansible-inventory.yml -i inventaire-vms.yml $(if $(K),--ask-become-pass)
+LAB_IP   := 10.200.4.120
+REPO_T   := ~/TP_Netops
+OBS_DIR  := $(REPO_T)/tools/observabilite
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
-        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull sot-cache nautobot-backup render conforme
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull sot-cache nautobot-backup render conforme \
+        o1 o2 o3 obs obs-status trafic panne reprise
 
 help:  ## Liste des cibles
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -98,3 +105,41 @@ nautobot-backup:  ## Sauvegarde la base Nautobot sur la VM tools (~/nautobot-bac
 
 nautobot-tasks:  ## Liste les commandes invoke disponibles
 	$(SSH) 'bash -lc "cd $(NAUTOBOT) && poetry run invoke --list"'
+# ---- Branche observabilité (O1 · O2 · O3) — indépendante de J4, après J3
+o1:  ## O1 : gnmic sur la VM Lab (fichier versionné, systemd, journald) abonné aux 9 cEOS → :9804
+	$(OBS) 500-observabilite.yml
+
+o2:  ## O2 : Prometheus (Compose, VM Tools) — vérifie d'abord que :9804 traverse, puis la cible UP et les 9 nœuds
+	$(SSH) 'set -e; git -C $(REPO_T) pull --ff-only -q; \
+	  timeout 5 bash -c "</dev/tcp/$(LAB_IP)/9804" && echo "OK  port 9804 de la VM Lab joignable depuis la VM Tools" \
+	    || { echo "KO  9804 injoignable depuis la VM Tools : gnmic tourne-t-il (make o1) ? pare-feu ?"; exit 1; }; \
+	  cd $(OBS_DIR) && docker compose up -d prometheus; \
+	  for i in $$(seq 1 20); do curl -sf localhost:9090/-/ready >/dev/null && break; sleep 3; done; \
+	  curl -sf -X POST localhost:9090/-/reload; sleep 20; \
+	  echo "up{job=gnmic}  : $$(curl -s "localhost:9090/api/v1/query?query=up%7Bjob%3D%22gnmic%22%7D" | grep -o "\"[01]\"\]" | tr -dc 01)"; \
+	  echo "nœuds stockés : $$(curl -s "localhost:9090/api/v1/query?query=count(count%20by%20(device)(gnmic_interfaces_interface_state_counters_in_octets))" | grep -o "\"[0-9]*\"\]" | tr -dc 0-9)"'
+
+o3:  ## O3 : Grafana (Compose, VM Tools) — datasource ET tableau de bord provisionnés par fichier, vérifiés sans un clic
+	$(SSH) 'set -e; git -C $(REPO_T) pull --ff-only -q; cd $(OBS_DIR); \
+	  test -f .env || { echo ".env absent sur la VM Tools : cd $(OBS_DIR) && cp .env.example .env (puis choisir le mot de passe)"; exit 1; }; \
+	  docker compose up -d grafana; \
+	  for i in $$(seq 1 30); do curl -sf localhost:3000/api/health >/dev/null && break; sleep 3; done; \
+	  . ./.env; A="admin:$$GF_SECURITY_ADMIN_PASSWORD"; \
+	  curl -sf -u "$$A" localhost:3000/api/datasources/uid/prometheus >/dev/null && echo "OK  source de données provisionnée"; \
+	  curl -sf -u "$$A" localhost:3000/api/dashboards/uid/netops-debit >/dev/null && echo "OK  tableau de bord provisionné (dossier NetOps)"'
+
+obs: o1 o2 o3  ## O1 + O2 + O3 d'affilée
+
+obs-status:  ## État de la chaîne : service gnmic, nœuds exposés, conteneurs et cible Prometheus
+	@echo "gnmic : $$(systemctl is-active gnmic) — nœuds exposés : $$(curl -s localhost:9804/metrics | grep -o 'device="[^"]*"' | sort -u | wc -l)"
+	@$(SSH) 'cd $(OBS_DIR) && docker compose ps --format "table {{.Service}}\t{{.Status}}\t{{.Image}}"'
+
+trafic:  ## O3 : trafic de test (≈ 58 kbit/s) : make trafic S=lc1 D=192.168.1.2 (Ctrl-C pour arrêter)
+	@test -n "$(S)" -a -n "$(D)" || { echo "Usage : make trafic S=lc1 D=192.168.1.2"; exit 1; }
+	docker exec -it $(S) ping -i 0.2 -s 1400 $(D)
+
+panne:  ## O3 : coupe une interface (défaut p2 Ethernet2) et affiche l'heure UTC : make panne [N=p2 I=Ethernet2]
+	$(PB) 510-experience-panne.yml -e etat=down $(if $(N),-e noeud=$(N)) $(if $(I),-e interface=$(I))
+
+reprise:  ## O3 : rétablit l'interface coupée par make panne
+	$(PB) 510-experience-panne.yml -e etat=up $(if $(N),-e noeud=$(N)) $(if $(I),-e interface=$(I))

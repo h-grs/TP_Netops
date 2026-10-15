@@ -126,6 +126,20 @@ Secours : `make run OFFLINE=1` (idem `plan`, `checkup`…) rejoue avec la **dern
 (`ansible/sot/host_vars/`, conservée tant qu'un `sot-pull` n'a pas réussi). Sauvegarde : `make nautobot-backup`.
 Historique : jusqu'au tag `sot-phase2`, les données étaient dans `ansible/host_vars/` (git).
 
+## Observabilité (O1 · O2 · O3)
+
+`cEOS gNMI → gnmic (VM Lab, systemd, :9804) → Prometheus (VM Tools) → Grafana (VM Tools)`.
+Détails, correspondance avec l'énoncé et contrôles : `ansible/docs/OBSERVABILITE.md`.
+
+| Cible | Effet |
+|---|---|
+| `o1` (`K=1` si sudo demande un mot de passe) | VM Lab : gnmic, fichier versionné, service systemd, journald, abonné aux 9 cEOS |
+| `o2` | VM Tools : Prometheus (`tools/observabilite/compose.yaml`), après test du port 9804 entre les VM |
+| `o3` | VM Tools : Grafana, datasource et tableau de bord provisionnés par fichier (`.env` à créer une fois) |
+| `obs` / `obs-status` | les trois d'affilée / état de la chaîne |
+| `trafic S=lc1 D=192.168.1.2` | trafic de test ≈ 58 kbit/s pour les expériences |
+| `panne` / `reprise` (`N=p2 I=Ethernet2`) | coupe / rétablit une interface, heure UTC affichée |
+
 ## Jalons
 
 | Jalon | Preuve | Commande |
@@ -135,6 +149,7 @@ Historique : jusqu'au tag `sot-phase2`, les données étaient dans `ansible/host
 | J3a Reproductibilité | tout revient depuis Git + Nautobot, sans geste manuel | `make destroy && make deploy && make run && make checkup` |
 | J3b Idempotence | second passage sans changement | `make run` deux fois → `changed=0` |
 | J3b Idempotence ≠ conformité | une ligne posée à la main n'est **pas** retirée par un rejeu | voir ci-dessous |
+| O1 · O2 · O3 Observabilité | collecte, stockage, tableau de bord, 2 expériences | `make obs` · `make obs-status` · `ansible/docs/O3_experiences.md` |
 | J4 La config est un artefact | gabarits + données séparées, rendu sans application, checkup inchangé | `make render N=pe1` · `make conforme` · `git diff avant-j4 HEAD -- ansible/100-checkup_escalier.yml` (vide) |
 
 Démonstration idempotence ≠ conformité :
@@ -155,10 +170,18 @@ ansible/
   100-checkup_escalier.yml      NE PAS MODIFIER (figé par le tag avant-j4)
   200-canary.yml  200-closed_network.yml   test d'étanchéité
   300-nautobot-sync.yml          inventaire → Nautobot, collection networktocode.nautobot (make nautobot-sync)
+  500-observabilite.yml          O1 : gnmic sur la VM Lab (make o1)
+  510-experience-panne.yml       O3 : make panne / reprise
+  inventaire-vms.yml             la VM Lab (O1, connexion locale)
+  observabilite/templates/       gnmic.yaml + gnmic.service
   04-rendu.yml                   J4 : rendu des gabarits (make render / make conforme)
   templates/eos/                 J4 : gabarits Jinja2, une couche par fichier (coeur, mpbgp, vrf, ce)
   400-sot-pull.yml               Nautobot → sot/host_vars/ (make sot-pull)
   templates/host_vars.yml.j2     gabarit des host_vars régénérés
+tools/observabilite/             VM Tools uniquement (sparse-checkout) : O2 + O3
+  compose.yaml                   Prometheus + Grafana, images épinglées ; .env (secret) jamais commité
+  prometheus/prometheus.yml      scrape de gnmic (10.200.4.120:9804)
+  grafana/provisioning/  grafana/dashboards/   datasource + tableau de bord, par fichier
 ```
 
 Ajouter un site : créer le CE, son poste, leurs interfaces, IP et câbles dans Nautobot

@@ -4,10 +4,8 @@
 #    make reprise [N=p2 I=Ethernet2]    la rétablit         (no shutdown)
 #  Défauts : p2 Ethernet2 (lien p2 ↔ pe2, la branche de Bordeaux).
 #  L'heure UTC de l'action est affichée : c'est « l'heure de coupure » à reporter
-#  dans docs/O3_experiences.md.
+#  dans ansible/docs/O3_experiences.md.
 # =============================================================================
-- import_playbook: nautobot_inventaire.yml
-
 - name: "Expérience de panne — {{ etat | default('?') }} de {{ noeud | default('p2') }} {{ interface | default('Ethernet2') }}"
   hosts: "{{ noeud | default('p2') }}"
   gather_facts: false

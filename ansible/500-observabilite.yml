@@ -1,0 +1,161 @@
+# =============================================================================
+#  O1 — Collecte : gNMI (intégré à EOS) -> gnmic (VM Lab, systemd) -> endpoint :9804   make o1
+#  O2 et O3 (Prometheus, Grafana) vivent sur la VM Tools : tools/observabilite/ (Docker Compose).
+#  Inventaires : celui GÉNÉRÉ par containerlab (les 9 cEOS, groupe arista_ceos, IP de mgmt)
+#                + inventaire-vms.yml (la VM Lab, en local). Nautobot n'est pas nécessaire ici.
+#  Données : group_vars/all/observabilite.yml · observabilite/templates/gnmic.*
+# =============================================================================
+
+# ======================================================================= O1
+- name: "O1 — gNMI activé sur chaque cEOS, via l'eAPI (rien n'est installé sur les équipements)"
+  hosts: arista_ceos
+  tags: [o1]
+  gather_facts: false
+  tasks:
+    - name: Serveur gNMI intégré à EOS, dans la VRF de management (déjà actif par défaut sous containerlab)
+      arista.eos.eos_config:
+        parents:
+          - management api gnmi
+          - transport grpc default
+        lines:
+          - vrf MGMT
+
+- name: "O1 — Les 9 serveurs gNMI répondent, vus depuis la VM Lab"
+  hosts: lab_vm
+  tags: [o1]
+  gather_facts: false
+  tasks:
+    - name: L'inventaire containerlab est chargé (cibles gNMI)
+      ansible.builtin.assert:
+        that: groups['arista_ceos'] | default([]) | length == nb_noeuds | int
+        fail_msg: "Il faut {{ nb_noeuds }} nœuds arista_ceos dans l'inventaire containerlab : lab déployé ? (make deploy)"
+        quiet: true
+
+    - name: "Port gNMI ouvert sur chaque cEOS, vu depuis la VM Lab"
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[item].ansible_host }}"
+        port: "{{ gnmi_port }}"
+        timeout: 120
+      loop: "{{ groups['arista_ceos'] | sort }}"
+
+- name: "O1 — gnmic : fichier de config versionné + service systemd"
+  hosts: lab_vm
+  tags: [o1]
+  gather_facts: true
+  gather_subset: [min]
+  vars:
+    gnmic_dir: "/opt/gnmic/{{ gnmic_version }}"
+  handlers:
+    - name: Redémarrer gnmic
+      ansible.builtin.systemd_service:
+        name: gnmic
+        state: restarted
+        daemon_reload: true
+  tasks:
+    - name: Architecture prévue (x86_64 ou aarch64)
+      ansible.builtin.assert:
+        that: ansible_architecture in gnmic_sha256
+        fail_msg: "Architecture {{ ansible_architecture }} non prévue : ajouter son SHA-256 dans gnmic_sha256."
+        quiet: true
+
+    - name: Groupe système gnmic
+      ansible.builtin.group:
+        name: gnmic
+        system: true
+
+    - name: Utilisateur système gnmic
+      ansible.builtin.user:
+        name: gnmic
+        group: gnmic
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Répertoires (binaire versionné, configuration)
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ gnmic_dir }}", group: root, mode: "0755" }
+        - { path: /etc/gnmic, group: gnmic, mode: "0750" }
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: "Télécharger gnmic {{ gnmic_version }} (somme SHA-256 vérifiée)"
+      ansible.builtin.get_url:
+        url: "https://github.com/openconfig/gnmic/releases/download/v{{ gnmic_version }}/gnmic_{{ gnmic_version }}_Linux_{{ ansible_architecture }}.tar.gz"
+        dest: "{{ gnmic_dir }}/gnmic.tar.gz"
+        checksum: "sha256:{{ gnmic_sha256[ansible_architecture] }}"
+        mode: "0644"
+
+    - name: Extraire le binaire
+      ansible.builtin.unarchive:
+        src: "{{ gnmic_dir }}/gnmic.tar.gz"
+        dest: "{{ gnmic_dir }}"
+        remote_src: true
+        creates: "{{ gnmic_dir }}/gnmic"
+      notify: Redémarrer gnmic
+
+    - name: Lien /usr/local/bin/gnmic vers la version épinglée
+      ansible.builtin.file:
+        src: "{{ gnmic_dir }}/gnmic"
+        dest: /usr/local/bin/gnmic
+        state: link
+      notify: Redémarrer gnmic
+
+    - name: "Configuration gnmic (source de vérité : ce fichier, pas une commande)"
+      ansible.builtin.template:
+        src: observabilite/templates/gnmic.yaml.j2
+        dest: /etc/gnmic/gnmic.yaml
+        owner: root
+        group: gnmic
+        mode: "0640"
+      notify: Redémarrer gnmic
+
+    - name: Unité systemd
+      ansible.builtin.template:
+        src: observabilite/templates/gnmic.service.j2
+        dest: /etc/systemd/system/gnmic.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Redémarrer gnmic
+
+    - name: Appliquer les changements avant de tester
+      ansible.builtin.meta: flush_handlers
+
+    - name: Service gnmic actif et activé au démarrage
+      ansible.builtin.systemd_service:
+        name: gnmic
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: "Le port {{ gnmic_prom_port }} écoute"
+      ansible.builtin.wait_for:
+        port: "{{ gnmic_prom_port }}"
+        timeout: 60
+
+    - name: Les 9 nœuds apparaissent dans l'endpoint (étiquette device)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ gnmic_prom_port }}/metrics"
+        return_content: true
+      register: gnmic_metrics
+      until: >-
+        (gnmic_metrics.content | regex_findall('device="([^"]+)"') | unique | length)
+        == (groups['arista_ceos'] | length)
+      retries: 18
+      delay: 5
+      changed_when: false
+
+    - name: Journaux du service (journalctl -u gnmic)
+      ansible.builtin.command: journalctl -u gnmic --no-pager -n 10
+      register: gnmic_journal
+      changed_when: false
+
+    - name: Dernières lignes du journal
+      ansible.builtin.debug:
+        var: gnmic_journal.stdout_lines
