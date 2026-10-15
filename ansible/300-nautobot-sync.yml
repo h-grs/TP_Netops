@@ -187,15 +187,17 @@
         query_params: [name, location]
       loop: "{{ groups['lc'] | default([]) }}"
 
-    # Aucun module ne gère le RD (propre à chaque PE) : on le corrige par l'API, seulement s'il diffère
+        # Aucun module ne gère le RD (propre à chaque PE)
     - name: RD de chaque VRF sur son PE
       vars:
         aff: >-
-          {{ query('networktocode.nautobot.lookup', 'vrf-device-assignments', api_endpoint=nb_url, token=nb_token,
-                   api_filter='vrf=' ~ item.vrf ~ ' device=' ~ item.device) | first }}
-      when: aff.value.rd != item.rd
+          {{ (lookup('ansible.builtin.url',
+                     nb_url ~ '/api/ipam/vrf-device-assignments/?vrf=' ~ item.vrf ~ '&device=' ~ item.device,
+                     headers={'Authorization': 'Token ' ~ nb_token, 'Accept': 'application/json'},
+                     split_lines=false) | from_json).results | first }}
+      when: aff.rd != item.rd
       ansible.builtin.uri:
-        url: "{{ nb_url }}/api/ipam/vrf-device-assignments/{{ aff.key }}/"
+        url: "{{ nb_url }}/api/ipam/vrf-device-assignments/{{ aff.id }}/"
         method: PATCH
         headers: {Authorization: "Token {{ nb_token }}"}
         body_format: json

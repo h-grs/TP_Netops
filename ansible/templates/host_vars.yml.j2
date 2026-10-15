@@ -1,0 +1,32 @@
+{#- host_vars d'un équipement, reconstruit depuis Nautobot (make sot-pull).
+    d    = l'équipement (réponse GraphQL)
+    tous = tous les équipements du lab, par nom (pour lire l'IP d'un poste en face)
+    Même contrat de variables que les host_vars écrits à la main : le checkup n'y voit pas la différence. -#}
+{%- set ip = {} -%}
+{%- for i in d.interfaces if i.ip_addresses -%}{%- set _ = ip.update({i.name: i.ip_addresses[0].address}) -%}{%- endfor -%}
+{%- set itfs = d.interfaces | sort(attribute='name') -%}
+# Généré depuis Nautobot ({{ d.name }}) — ne pas éditer : modifier Nautobot puis make sot-pull
+{% if d.role.name in ['P', 'PE'] %}
+loopback: {{ ip['Loopback0'] | ansible.utils.ipaddr('address') }}
+interfaces_coeur:
+{% for i in itfs if i.name != 'Loopback0' and i.vrf is none and i.connected_interface %}
+  - {nom: {{ i.name }}, ip: {{ ip[i.name] }}, vers: {{ i.connected_interface.device.name }}}
+{% endfor %}
+{% set racc = itfs | selectattr('vrf') | list %}
+{% if racc %}
+raccordements:
+{% for i in racc %}
+  - {nom: {{ i.name }}, vrf: {{ i.vrf.name }}, ip: {{ ip[i.name] }}, ce: {{ i.connected_interface.device.name }}}
+{% endfor %}
+{% endif %}
+{% elif d.role.name == 'CE' %}
+{% set up = itfs | selectattr('connected_interface') | selectattr('connected_interface.device.role.name', 'eq', 'PE') | first %}
+{% set lan = itfs | selectattr('connected_interface') | selectattr('connected_interface.device.role.name', 'eq', 'Poste') | first %}
+{% set poste = tous[lan.connected_interface.device.name] %}
+{% set ip_poste = (poste.interfaces | selectattr('name', 'eq', lan.connected_interface.name) | first).ip_addresses[0].address %}
+asn: {{ d.local_config_context_data.asn }}
+tenant: {{ vrf_du_client[d.tenant.name] }}
+uplink: {nom: {{ up.name }}, ip: {{ ip[up.name] }}, pe: {{ up.connected_interface.device.name }}}
+lan:    {nom: {{ lan.name }}, ip: {{ ip[lan.name] }}, hote: {{ poste.name }}, hote_ip: {{ ip_poste | ansible.utils.ipaddr('address') }}}
+canary: {{ d.local_config_context_data.canary }}
+{% endif %}
