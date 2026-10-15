@@ -54,8 +54,8 @@
   tasks:
     - name: Architecture prévue (x86_64 ou aarch64)
       ansible.builtin.assert:
-        that: ansible_architecture in gnmic_sha256
-        fail_msg: "Architecture {{ ansible_architecture }} non prévue : ajouter son SHA-256 dans gnmic_sha256."
+        that: ansible_facts['architecture'] in gnmic_sha256
+        fail_msg: "Architecture {{ ansible_facts['architecture'] }} non prévue : ajouter son SHA-256 dans gnmic_sha256."
         quiet: true
 
     - name: Groupe système gnmic
@@ -86,9 +86,9 @@
 
     - name: "Télécharger gnmic {{ gnmic_version }} (somme SHA-256 vérifiée)"
       ansible.builtin.get_url:
-        url: "https://github.com/openconfig/gnmic/releases/download/v{{ gnmic_version }}/gnmic_{{ gnmic_version }}_Linux_{{ ansible_architecture }}.tar.gz"
+        url: "https://github.com/openconfig/gnmic/releases/download/v{{ gnmic_version }}/gnmic_{{ gnmic_version }}_Linux_{{ ansible_facts['architecture'] }}.tar.gz"
         dest: "{{ gnmic_dir }}/gnmic.tar.gz"
-        checksum: "sha256:{{ gnmic_sha256[ansible_architecture] }}"
+        checksum: "sha256:{{ gnmic_sha256[ansible_facts['architecture']] }}"
         mode: "0644"
 
     - name: Extraire le binaire
@@ -104,6 +104,7 @@
         src: "{{ gnmic_dir }}/gnmic"
         dest: /usr/local/bin/gnmic
         state: link
+        force: true          # remplace un gnmic installé à la main (script d'install) par la version épinglée
       notify: Redémarrer gnmic
 
     - name: "Configuration gnmic (source de vérité : ce fichier, pas une commande)"

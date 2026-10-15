@@ -12,6 +12,8 @@ OBS      := cd ansible && ansible-playbook -i ../clab-netops/ansible-inventory.y
 LAB_IP   := 10.200.4.120
 REPO_T   := ~/TP_Netops
 OBS_DIR  := $(REPO_T)/tools/observabilite
+SSHA     := ssh -A -o BatchMode=yes $(TOOLS)   # -A : ta clé GitHub suit, pour le git pull sur la VM Tools
+PULL_T   := git -C $(REPO_T) pull --ff-only -q || echo "!!  git pull impossible sur la VM Tools : fichiers déjà présents utilisés"
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
         tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull sot-cache nautobot-backup render conforme \
@@ -110,7 +112,7 @@ o1:  ## O1 : gnmic sur la VM Lab (fichier versionné, systemd, journald) abonné
 	$(OBS) 500-observabilite.yml
 
 o2:  ## O2 : Prometheus (Compose, VM Tools) — vérifie d'abord que :9804 traverse, puis la cible UP et les 9 nœuds
-	$(SSH) 'set -e; git -C $(REPO_T) pull --ff-only -q; \
+	$(SSHA) 'set -e; $(PULL_T); \
 	  timeout 5 bash -c "</dev/tcp/$(LAB_IP)/9804" && echo "OK  port 9804 de la VM Lab joignable depuis la VM Tools" \
 	    || { echo "KO  9804 injoignable depuis la VM Tools : gnmic tourne-t-il (make o1) ? pare-feu ?"; exit 1; }; \
 	  cd $(OBS_DIR) && docker compose up -d prometheus; \
@@ -120,7 +122,7 @@ o2:  ## O2 : Prometheus (Compose, VM Tools) — vérifie d'abord que :9804 trave
 	  echo "nœuds stockés : $$(curl -s "localhost:9090/api/v1/query?query=count(count%20by%20(device)(gnmic_interfaces_interface_state_counters_in_octets))" | grep -o "\"[0-9]*\"\]" | tr -dc 0-9)"'
 
 o3:  ## O3 : Grafana (Compose, VM Tools) — datasource ET tableau de bord provisionnés par fichier, vérifiés sans un clic
-	$(SSH) 'set -e; git -C $(REPO_T) pull --ff-only -q; cd $(OBS_DIR); \
+	$(SSHA) 'set -e; $(PULL_T); cd $(OBS_DIR); \
 	  test -f .env || { echo ".env absent sur la VM Tools : cd $(OBS_DIR) && cp .env.example .env (puis choisir le mot de passe)"; exit 1; }; \
 	  docker compose up -d grafana; \
 	  for i in $$(seq 1 30); do curl -sf localhost:3000/api/health >/dev/null && break; sleep 3; done; \
