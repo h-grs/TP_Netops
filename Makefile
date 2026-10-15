@@ -18,7 +18,7 @@ inspect:  ## État des nœuds et IP de management
 # ---- J2 : Ansible
 deps:  ## Dépendances (une seule fois) : netaddr dans l'Ansible pipx + collections
 	pipx inject ansible netaddr
-	ansible-galaxy collection install -r ansible/collections.yml
+	ansible-galaxy collection install -r ansible/00-collections.yml
 coeur:  ## Playbook 1 : OSPF + MPLS/LDP
 	$(PB) 01-coeur.yml
 mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)

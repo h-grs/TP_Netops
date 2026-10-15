@@ -29,6 +29,7 @@
         lines:
           - "ip address {{ loopback }}/32"
           - ip ospf area 0.0.0.0
+          - mpls ldp interface
 
     - name: Liens du cœur (OSPF + LDP)
       arista.eos.eos_config:
