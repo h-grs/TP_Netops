@@ -207,35 +207,38 @@
         fail_msg: "des routes client sont visibles sur {{ inventory_hostname }} : le cœur n'est plus agnostique"
 
 
-# -----------------------------------------------------------------------------
-#  BARREAU 4 — Trafic
-#  Chaque CE ping le poste de l'autre site du MÊME client.
-# -----------------------------------------------------------------------------
-- name: "Barreau 4/4 — chaque site joint le poste de l'autre site de son client"
+- name: "Barreau 4/4 — chaque poste joint le poste de l'autre site de son client"
   hosts: ce
   gather_facts: false
   any_errors_fatal: true
   vars:
-    mon_ip: "{{ lan.ip | ansible.utils.ipaddr('address') }}"   # "192.168.1.1/24" → "192.168.1.1"
+    prefixe_conteneur: ""                                
+    mon_poste: "{{ prefixe_conteneur }}{{ lan.hote }}"  
   tasks:
-    - name: Ping du poste distant
-      # Autre site du même client = même tenant, mais pas moi
+    - name: Ping depuis mon poste vers le poste distant (réessaie jusqu'à 15 s)
       when: hostvars[autre].tenant == tenant and autre != inventory_hostname
-      arista.eos.eos_command:
-        # source = notre LAN, sinon le ping part du lien PE–CE, hors VPN
-        commands:
-          - "ping {{ hostvars[autre].lan.hote_ip }} source {{ mon_ip }} repeat 3"
+      delegate_to: localhost
+      ansible.builtin.command: "docker exec {{ mon_poste }} ping -c 3 -W 2 {{ hostvars[autre].lan.hote_ip }}"
       loop: "{{ groups['ce'] }}"
       loop_control:
         loop_var: autre
+        label: "{{ lan.hote }} → {{ hostvars[autre].lan.hote }}"
       register: pings
-
+      until: "' 0% packet loss' in pings.stdout"
+      retries: 3
+      delay: 5
+      changed_when: false
+      failed_when: false
+ 
     - name: 3 réponses sur 3
       when: p is not skipped
       ansible.builtin.assert:
-        that: "'3 received' in p.stdout[0]"
-        fail_msg: "{{ inventory_hostname }} → {{ hostvars[p.autre].lan.hote }} ({{ hostvars[p.autre].lan.hote_ip }}) : pertes de paquets"
+        # " 0% packet loss" avec l'espace devant : ne matche pas "100% packet loss"
+        that: "' 0% packet loss' in p.stdout"
+        fail_msg: >-
+          {{ lan.hote }} → {{ hostvars[p.autre].lan.hote }} ({{ hostvars[p.autre].lan.hote_ip }}) :
+          {{ p.stderr | default('pertes de paquets', true) }}
       loop: "{{ pings.results }}"
       loop_control:
         loop_var: p
-        label: "{{ inventory_hostname }} → {{ p.autre }}"
+        label: "{{ lan.hote }} → {{ hostvars[p.autre].lan.hote }}"

@@ -5,7 +5,7 @@
 #  Résultat attendu : chaque VRF contient les 2 LAN de SON client,
 #  et lc1 joint lc4 (client 1), lc2 joint lc3 (client 2).
 #  Données : host_vars → raccordements (PE), uplink/lan/asn (CE)
-#            group_vars/all/reseau.yml → tenants (id, rt)
+#            group_vars/all/network.yml → tenants (id, rt)
 # =============================================================================
 - name: "VRF — côté PE"
   hosts: pe

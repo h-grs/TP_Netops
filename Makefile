@@ -2,7 +2,7 @@ TOPO := netops.clab.yaml
 CLAB ?= sudo containerlab
 PB   := cd ansible && ansible-playbook     
  
-.PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup render plan closedness cli
+.PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli
 
 
  
@@ -20,7 +20,7 @@ inspect:  ## État des nœuds et IP de management
 # ---- J2 : Ansible
 deps:  ## Dépendances (une seule fois) : netaddr dans l'Ansible pipx + collections
 	pipx inject ansible netaddr
-	ansible-galaxy collection install -r ansible/00-collections.yml
+	ansible-galaxy collection install -r ansible/requirements.yml
 coeur:  ## Playbook 1 : OSPF + MPLS/LDP
 	$(PB) 01-coeur.yml
 mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
@@ -37,9 +37,6 @@ run:  ## Applique tout (les 3 playbooks d'affilée)
 plan:  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
 	@test -n "$(N)" || { echo "Usage : make plan N=pe1"; exit 1; }
 	$(PB) run.yml -l $(N) --check --diff
-
-collections:
-	$(PB) 00-collections.yml
 
 closedness:  ## Test d'étanchéité (pose le canari, teste, le retire)
 	($(PB) 200-canary.yml -e etat=on)
