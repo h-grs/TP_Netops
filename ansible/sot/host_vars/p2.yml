@@ -1,6 +1,0 @@
-# Généré depuis Nautobot (p2) — ne pas éditer : modifier Nautobot puis make sot-pull
-loopback: 10.0.0.2
-interfaces_coeur:
-  - {nom: Ethernet1, ip: 10.10.0.3/31, vers: p1}
-  - {nom: Ethernet2, ip: 10.10.0.4/31, vers: pe2}
-  - {nom: Ethernet3, ip: 10.10.0.6/31, vers: pe3}

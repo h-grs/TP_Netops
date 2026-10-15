@@ -1,2 +1,3 @@
 clab-*/
-.DS_Storeansible/.sot/
+.DS_Store
+ansible/sot/host_vars/

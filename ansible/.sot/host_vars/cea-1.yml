@@ -1,6 +1,0 @@
-# Généré depuis Nautobot (cea-1) — ne pas éditer : modifier Nautobot puis make sot-pull
-asn: 65002
-tenant: VRFA
-uplink: {nom: Ethernet1, ip: 172.21.0.1/31, pe: pe1}
-lan:    {nom: Ethernet2, ip: 192.168.0.1/24, hote: lc1, hote_ip: 192.168.0.2}
-canary: 10.255.1.1/32
