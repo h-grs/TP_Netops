@@ -128,7 +128,8 @@ o3:  ## O3 : Grafana (Compose, VM Tools) — datasource ET tableau de bord provi
 	  for i in $$(seq 1 30); do curl -sf localhost:3000/api/health >/dev/null && break; sleep 3; done; \
 	  . ./.env; A="admin:$$GF_SECURITY_ADMIN_PASSWORD"; \
 	  curl -sf -u "$$A" localhost:3000/api/datasources/uid/prometheus >/dev/null && echo "OK  source de données provisionnée"; \
-	  curl -sf -u "$$A" localhost:3000/api/dashboards/uid/netops-debit >/dev/null && echo "OK  tableau de bord provisionné (dossier NetOps)"'
+	  for d in netops-reseau netops-debit; do \
+	    curl -sf -u "$$A" localhost:3000/api/dashboards/uid/$$d >/dev/null && echo "OK  tableau de bord $$d provisionné (dossier NetOps)" || echo "KO  tableau de bord $$d absent"; done'
 
 obs: o1 o2 o3  ## O1 + O2 + O3 d'affilée
 

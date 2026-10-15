@@ -1,5 +1,6 @@
 # {{ ansible_managed }}
 # gnmic {{ gnmic_version }} — abonnement gNMI (modèle push) -> endpoint Prometheus :{{ gnmic_prom_port }}
+# Chemins OpenConfig : le même modèle pour les 9 cEOS, quel que soit leur rôle.
 username: {{ gnmi_username }}
 password: {{ gnmi_password }}
 insecure: true                  # gNMI cEOS en clair (port {{ gnmi_port }})
@@ -15,6 +16,7 @@ targets:
 {% endfor %}
 
 subscriptions:
+  # P de FCAPS — Performance : compteurs d'interfaces (octets, paquets, erreurs, rejets)
   interfaces-counters:
     paths:
       - /interfaces/interface/state/counters
@@ -22,11 +24,32 @@ subscriptions:
     stream-mode: sample
     sample-interval: {{ gnmic_sample_interval }}
 
+  # F de FCAPS — Fault : état des interfaces (UP / DOWN), vu par l'équipement lui-même
+  interfaces-etat:
+    paths:
+      - /interfaces/interface/state/oper-status
+      - /interfaces/interface/state/admin-status
+    mode: stream
+    stream-mode: sample
+    sample-interval: {{ gnmic_sample_interval }}
+
+  # Plan de contrôle VPN : sessions BGP (iBGP VPNv4 vers le RR, eBGP PE–CE dans les VRF)
+  # et préfixes reçus par session. p2 ne fait pas de BGP : il ne renvoie rien, c'est attendu.
+  bgp:
+    paths:
+      - /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/state/session-state
+      - /network-instances/network-instance/protocols/protocol/bgp/neighbors/neighbor/afi-safis/afi-safi/state/prefixes/received
+    mode: stream
+    stream-mode: sample
+    sample-interval: {{ gnmic_sample_interval }}
+
 processors:
+  # json_ietf encode les uint64 en chaînes : on les remet en nombres pour Prometheus
   counters-to-int:
     event-convert:
       value-names:
         - ".*counters.*"
+        - ".*prefixes.*"
       type: int
 
 outputs:
@@ -34,7 +57,10 @@ outputs:
     type: prometheus
     listen: ":{{ gnmic_prom_port }}"
     path: /metrics
-    expiration: 60s
+    expiration: 30s             
     metric-prefix: gnmic
+    # Les états texte (UP, ESTABLISHED…) deviennent une étiquette, la valeur vaut 1 :
+    #   gnmic_interfaces_interface_state_oper_status{device="pe1", interface_name="Ethernet1", oper_status="UP"} 1
+    strings-as-labels: true
     event-processors:
       - counters-to-int

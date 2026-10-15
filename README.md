@@ -134,7 +134,7 @@ Détails, correspondance avec l'énoncé et contrôles : `ansible/docs/OBSERVABI
 | Cible | Effet |
 |---|---|
 | `o1` (`K=1` si sudo demande un mot de passe) | VM Lab : gnmic, fichier versionné, service systemd, journald, abonné aux 9 cEOS |
-| `o2` | VM Tools : Prometheus (`tools/observabilite/compose.yaml`), après test du port 9804 entre les VM |
+| `o2` | VM Tools : Prometheus (`tools/observabilite/compose.yml`), après test du port 9804 entre les VM |
 | `o3` | VM Tools : Grafana, datasource et tableau de bord provisionnés par fichier (`.env` à créer une fois) |
 | `obs` / `obs-status` | les trois d'affilée / état de la chaîne |
 | `trafic S=lc1 D=192.168.1.2` | trafic de test ≈ 58 kbit/s pour les expériences |
@@ -179,9 +179,9 @@ ansible/
   400-sot-pull.yml               Nautobot → sot/host_vars/ (make sot-pull)
   templates/host_vars.yml.j2     gabarit des host_vars régénérés
 tools/observabilite/             VM Tools uniquement (sparse-checkout) : O2 + O3
-  compose.yaml                   Prometheus + Grafana, images épinglées ; .env (secret) jamais commité
+  compose.yml                   Prometheus + Grafana, images épinglées ; .env (secret) jamais commité
   prometheus/prometheus.yml      scrape de gnmic (10.200.4.120:9804)
-  grafana/provisioning/  grafana/dashboards/   datasource + tableau de bord, par fichier
+  grafana/provisioning/  grafana/dashboards/   datasource + 2 tableaux de bord (état du réseau, débit), par fichier
 ```
 
 Ajouter un site : créer le CE, son poste, leurs interfaces, IP et câbles dans Nautobot
