@@ -16,9 +16,7 @@ topology:
         CLAB_MGMT_VRF: MGMT
     linux:
       # Image déjà présente sur VM_Lab (iproute2, ping, iperf3, tcpdump).
-      # Son tag est "latest" (interdit, cf. J3) : à remplacer par le digest exact
-      # de l'image locale (image: ghcr.io/...@sha256:...) puis commit.
-      image: ghcr.io/srl-labs/network-multitool:latest
+      image: ghcr.io/srl-labs/network-multitool@sha256:9bc1e46dd105a054bce724b6744200e951e8fdf4c17658912fbc54fd2e8a4b06
 
   # `labels: {ansible-group: X}` : containerlab range le nœud dans le groupe X de
   # l'inventaire Ansible généré. Groupes p / pe / ce / lc -> les playbooks J2

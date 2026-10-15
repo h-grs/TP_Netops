@@ -4,7 +4,7 @@
 #    CE : interface vers le PE + LAN + eBGP vers le PE, annonce du LAN
 #  Résultat attendu : chaque VRF contient les 2 LAN de SON client,
 #  et lc1 joint lc4 (client 1), lc2 joint lc3 (client 2).
-#  Données : host_vars → raccordements (PE), uplink/lan/asn (CE)
+#  Données : Nautobot (sot/host_vars) → raccordements (PE), uplink/lan/asn (CE)
 #            group_vars/all/network.yml → tenants (id, rt)
 # =============================================================================
 - name: "VRF — côté PE"
@@ -77,4 +77,3 @@
           - "router-id {{ lan.ip | ansible.utils.ipaddr('address') }}"
           - "neighbor {{ uplink.ip | ansible.utils.ipaddr('peer') }} remote-as {{ asn_coeur }}"
           - "network {{ lan.ip | ansible.utils.ipaddr('network/prefix') }}"
-  

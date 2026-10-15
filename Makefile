@@ -4,9 +4,11 @@ PB   := cd ansible && ansible-playbook
 TOOLS    := NetOps@10.200.4.68
 SSH      := ssh -o BatchMode=yes $(TOOLS)
 NAUTOBOT := ~/nautobot-docker-compose
+# OFFLINE=1 : Nautobot injoignable → on rejoue avec la dernière copie lue (ansible/sot/host_vars/)
+SOT := $(if $(OFFLINE),sot-cache,sot-pull)
 
 .PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup plan closedness cli \
-        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull nautobot-backup render conforme
+        tools-status nautobot-up nautobot-down nautobot-tasks nautobot-sync nautobot-devices nautobot-ipam sot-pull sot-cache nautobot-backup render conforme
 
 help:  ## Liste des cibles
 	@grep -hE '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -23,31 +25,31 @@ inspect:  ## État des nœuds et IP de management
 deps:  ## Dépendances (une seule fois) : netaddr + pynautobot dans l'Ansible pipx, collections
 	pipx inject ansible netaddr pynautobot
 	ansible-galaxy collection install -r ansible/requirements.yml
-coeur: sot-pull  ## Playbook 1 : OSPF + MPLS/LDP
+coeur: $(SOT)  ## Playbook 1 : OSPF + MPLS/LDP
 	$(PB) 01-coeur.yml
-mpbgp: sot-pull  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
+mpbgp: $(SOT)  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
 	$(PB) 02-mpbgp.yml
-vrf: sot-pull  ## Playbook 3 : VRF + PE–CE + CE
+vrf: $(SOT)  ## Playbook 3 : VRF + PE–CE + CE
 	$(PB) 03-vrf.yml
 
-checkup: sot-pull  ## Checkup en escalier (OSPF/LDP, VPNv4, eBGP, routes, ping des postes)
+checkup: $(SOT)  ## Checkup en escalier (OSPF/LDP, VPNv4, eBGP, routes, ping des postes)
 	$(PB) 100-checkup_escalier.yml
 
-run: sot-pull  ## Applique tout (les 3 playbooks d'affilée)
+run: $(SOT)  ## Applique tout (les 3 playbooks d'affilée)
 	$(PB) run.yml
 
-plan: sot-pull  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
+plan: $(SOT)  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
 	@test -n "$(N)" || { echo "Usage : make plan N=pe1"; exit 1; }
 	$(PB) run.yml -l $(N) --check --diff
 
-render: sot-pull  ## J4 : rend la config voulue en texte, sans l'appliquer → rendu/<nœud>.cfg (N=pe1 pour l'afficher)
+render: $(SOT)  ## J4 : rend la config voulue en texte, sans l'appliquer → rendu/<nœud>.cfg (N=pe1 pour l'afficher)
 	$(PB) 04-rendu.yml $(if $(N),-l $(N))
 	@$(if $(N),cat rendu/$(N).cfg,ls rendu/)
 
-conforme: sot-pull  ## J4 : compare chaque rendu à la config réelle (mode check, rien n'est appliqué)
+conforme: $(SOT)  ## J4 : compare chaque rendu à la config réelle (mode check, rien n'est appliqué)
 	$(PB) 04-rendu.yml --tags rendu,conforme $(if $(N),-l $(N))
 
-closedness: sot-pull  ## Test d'étanchéité (pose le canari, teste, le retire)
+closedness: $(SOT)  ## Test d'étanchéité (pose le canari, teste, le retire)
 	($(PB) 200-canary.yml -e etat=on)
 	($(PB) 200-closed_network.yml); r=$$?; ($(PB) 200-canary.yml -e etat=off); exit $$r
 
@@ -68,6 +70,10 @@ nautobot-down:  ## Arrête Nautobot sur la VM tools
 nautobot-sync:  ## Amorçage : pousse les host_vars dans Nautobot (inutile une fois Nautobot source de vérité)
 	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \
 	$(PB) 300-nautobot-sync.yml
+
+sot-cache:  ## Mode OFFLINE=1 : vérifie qu'une copie des données Nautobot existe déjà
+	@test -n "$$(ls ansible/sot/host_vars/*.yml 2>/dev/null)" || { echo "Aucune copie dans ansible/sot/host_vars/ : lancer make sot-pull (Nautobot joignable) au moins une fois"; exit 1; }
+	@echo "OFFLINE : données Nautobot du $$(date -r ansible/sot/host_vars '+%F %H:%M') (ansible/sot/host_vars/)"
 
 sot-pull:  ## Lit Nautobot → ansible/sot/host_vars/ (lancé avant run/plan/checkup ; compare à host_vars/ s'il existe)
 	@export NAUTOBOT_TOKEN="$${NAUTOBOT_TOKEN:-$$($(SSH) 'grep -oP "^NAUTOBOT_SUPERUSER_API_TOKEN=\K.*" $(NAUTOBOT)/environments/creds.env')}"; \

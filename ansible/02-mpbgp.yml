@@ -2,7 +2,7 @@
 #  Playbook 2/3 — MP-BGP VPNv4 : les PE ↔ le Route Reflector p1 (AS 65000)
 #  Résultat attendu : 3 sessions Established sur p1, famille VPNv4.
 #  (0 préfixe tant que les VRF n'existent pas : c'est le playbook 3)
-#  Données : host_vars → loopback ; group_vars/all/network.yml → asn_coeur, rr
+#  Données : Nautobot (sot/host_vars) → loopback ; group_vars/all/network.yml → asn_coeur, rr
 # =============================================================================
 - name: "SETUP MP-BGP — chaque PE vers le RR"
   hosts: pe

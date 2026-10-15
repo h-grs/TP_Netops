@@ -122,7 +122,28 @@ Chaque `make run` / `plan` / `checkup` commence par `make sot-pull`, qui les rel
 | voir ce que lit Ansible | `ansible/sot/host_vars/<nœud>.yml` après `make sot-pull` |
 
 Nautobot injoignable = `make run` refuse de partir (pas de config sans données).
+Secours : `make run OFFLINE=1` (idem `plan`, `checkup`…) rejoue avec la **dernière copie lue**
+(`ansible/sot/host_vars/`, conservée tant qu'un `sot-pull` n'a pas réussi). Sauvegarde : `make nautobot-backup`.
 Historique : jusqu'au tag `sot-phase2`, les données étaient dans `ansible/host_vars/` (git).
+
+## Jalons → preuves
+
+| Jalon | Preuve | Commande |
+|---|---|---|
+| J1 Le lab existe | 13 conteneurs, IP de management, détruire/reconstruire | `make deploy` · `make inspect` · `make destroy` |
+| J2 Le service tourne | playbooks par couches, checkup en escalier (`any_errors_fatal`) | `make run` · `make checkup` · `make closedness` |
+| J3a Reproductibilité | tout revient depuis Git + Nautobot, sans geste manuel | `make destroy && make deploy && make run && make checkup` |
+| J3b Idempotence | second passage sans changement | `make run` deux fois → `changed=0` |
+| J3b Idempotence ≠ conformité | une ligne posée à la main n'est **pas** retirée par un rejeu | voir ci-dessous |
+| J4 La config est un artefact | gabarits + données séparées, rendu sans application, checkup inchangé | `make render N=pe1` · `make conforme` · `git diff avant-j4 HEAD -- ansible/100-checkup_escalier.yml` (vide) |
+
+Démonstration idempotence ≠ conformité :
+```bash
+make cli N=pe2          # configure → interface Loopback99 → description ajout-manuel → end
+make run                # changed=0 : le rejeu ne voit pas la ligne et ne la retire pas
+make conforme           # toujours « conforme » : on vérifie que le voulu est présent, pas l'absence du reste
+make cli N=pe2          # configure → no interface Loopback99 → end   (remise en état)
+```
 
 ## Où modifier quoi
 
