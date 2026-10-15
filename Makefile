@@ -25,6 +25,9 @@ mpbgp:  ## Playbook 2 : MP-BGP VPNv4 (RR p1)
 	$(PB) 02-mpbgp.yml
 vrf:  ## Playbook 3 : VRF + PE–CE + CE
 	$(PB) 03-vrf.yml
+
+checkup:  ## Playbook 3 : VRF + PE–CE + CE
+	$(PB) 100-checkup_escalier.yml	
 	
 render:  ## Rendu d'un gabarit sans appliquer : make render N=pe1 (POUR J4)
 	$(PB) 04-rendu.yml -l $(N)
