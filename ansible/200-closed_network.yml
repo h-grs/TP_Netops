@@ -4,6 +4,23 @@
   vars:
     vrfs_du_pe: "{{ raccordements | map(attribute='vrf') | list }}"
   tasks:
+    # Le canari vient d'être posé (200-canary.yml) : il lui faut quelques secondes pour
+    # traverser eBGP CE → PE → VPNv4 → RR → PE. On attend qu'il soit arrivé là où il DOIT
+    # être (VRF de son client) avant de juger : sinon un « MANQUANT » ou une fausse absence
+    # chez l'autre client serait un simple problème de timing, pas d'étanchéité.
+    - name: Attente — chaque canari arrive dans la VRF de son client (60 s max)
+      arista.eos.eos_command:
+        commands: ["show ip route vrf {{ item.0 }} {{ hostvars[item.1].canary }}"]
+      loop: "{{ vrfs_du_pe | product(groups['ce']) | list }}"
+      loop_control:
+        label: "VRF {{ item.0 }} ← canari de {{ item.1 }}"
+      when: hostvars[item.1].tenant == item.0
+      register: attente
+      until: hostvars[item.1].canary in attente.stdout[0]
+      retries: 12
+      delay: 5
+      failed_when: false      # pas d'échec ici : c'est l'assert qui dira MANQUANT
+
     - name: Relevé
       arista.eos.eos_command:
         commands: ["show ip route vrf {{ item.0 }} {{ hostvars[item.1].canary }}"]
