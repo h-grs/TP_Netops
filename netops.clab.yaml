@@ -16,8 +16,8 @@ topology:
         CLAB_MGMT_VRF: MGMT
     linux:
       # Image déjà présente sur VM_Lab (iproute2, ping, iperf3, tcpdump).
-      # Son tag est "latest" (interdit, cf. J3) : `make pin-hosts` remplace la
-      # ligne ci-dessous par le digest exact de l'image locale, puis on commit.
+      # Son tag est "latest" (interdit, cf. J3) : à remplacer par le digest exact
+      # de l'image locale (image: ghcr.io/...@sha256:...) puis commit.
       image: ghcr.io/srl-labs/network-multitool:latest
 
   # `labels: {ansible-group: X}` : containerlab range le nœud dans le groupe X de
@@ -96,7 +96,7 @@ topology:
         - ip addr add 192.168.1.2/24 dev eth1
         - ip route add 192.168.0.0/24 via 192.168.1.1
 
-  # (host_vars), pas ici. Un endpoint ne peut servir qu'une fois.
+  # Les adresses IP des liens sont dans host_vars/<nœud>.yml, pas ici.
   links:
     # ---- Cœur (OSPF aire 0 + LDP en J2) : chaîne PE1 – P1 – P2 – PE2/PE3
     - endpoints: ["p1:eth1", "pe1:eth1"]

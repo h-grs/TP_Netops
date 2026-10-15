@@ -50,7 +50,7 @@ make checkup   # vérifie
 | `plan [N=pe1]` | Diff avec la config réelle, **sans appliquer** |
 | `checkup` | Checkup en 4 barreaux, lecture seule |
 | `closedness` | Test d'étanchéité entre clients |
-| `render N=pe1` | Affiche le rendu d'un gabarit, sans l'appliquer (J4) |
+| `render N=pe1` | (J4 — pas encore disponible) Affiche le rendu d'un gabarit, sans l'appliquer |
 | `cli N=p1` | Ouvre la CLI d'un nœud (le lab doit être up) |
 
 ## Vérifier
@@ -60,7 +60,7 @@ make checkup   # vérifie
 1. Sous-jacent : OSPF FULL, loopbacks en table, sessions LDP
 2. Plan de contrôle : VPNv4 PE ↔ RR, eBGP PE ↔ CE
 3. Plan de données : routes dans chaque VRF, aucune route client sur les P
-4. Trafic : chaque site pingue le poste de l'autre site de son client
+4. Trafic : chaque poste (lc1 à lc4) pingue le poste de l'autre site de son client (`docker exec`)
 
 **`make closedness`** : prouve l'isolation. Comme les LAN sont identiques, on ne peut pas
 chercher « le LAN de l'autre client ». On pose à la place un **canari**, une loopback

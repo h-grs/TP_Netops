@@ -1,6 +1,6 @@
 # CEA_1 — CLIENT 1, site A (Paris) — raccordé à pe1 dans la VRF VRFA
 asn: 65002 
-tenant: VRFA                 # clé de group_vars/all/reseau.yml → tenants
+tenant: VRFA                 # clé de group_vars/all/network.yml → tenants
 uplink: {nom: Ethernet1, ip: 172.21.0.1/31, pe: pe1}
 lan:    {nom: Ethernet2, ip: 192.168.0.1/24, hote: lc1, hote_ip: 192.168.0.2}
 canary: 10.255.1.1/32 

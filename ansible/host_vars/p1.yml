@@ -1,4 +1,4 @@
-# P1 — cœur + Route Reflector VPNv4 (rôle désigné dans group_vars/all/reseau.yml : rr: p1)
+# P1 — cœur + Route Reflector VPNv4 (rôle désigné dans group_vars/all/network.yml : rr: p1)
 # Aucune VRF : il reflète des routes clients sans jamais les installer dans sa RIB.
 loopback: 10.0.0.1
 interfaces_coeur:

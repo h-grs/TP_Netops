@@ -28,7 +28,7 @@
         parents: interface Loopback0
         lines:
           - "ip address {{ loopback }}/32"
-          - ip ospf area {{ ospf_area }}
+          - "ip ospf area {{ ospf_area }}"
           - mpls ldp interface
 
     - name: Liens du cœur (OSPF + LDP)
@@ -38,13 +38,13 @@
           - no switchport
           - "ip address {{ item.ip }}"
           - ip ospf network point-to-point
-          - ip ospf area {{ ospf_area }}
+          - "ip ospf area {{ ospf_area }}"
           - mpls ldp interface
       loop: "{{ interfaces_coeur }}"
 
     - name: OSPF
       arista.eos.eos_config:
-        parents: router {{ ospf_process }}
+        parents: "router ospf {{ ospf_process }}"
         lines:
           - "router-id {{ loopback }}"
 
