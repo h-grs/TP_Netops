@@ -1,7 +1,7 @@
 # Crée un objet Nautobot s'il n'existe pas encore (GET puis POST)
 - name: "Existe ? {{ obj.endpoint }} {{ obj.filtre }}"
   ansible.builtin.uri:
-    url: "{{ nb_url }}/api/{{ obj.endpoint }}/?{{ obj.filtre }}"
+    url: "{{ nb_url }}/api/{{ obj.endpoint }}/?{{ obj.filtre | replace(' ', '%20') }}"
     headers: "{{ nb_headers }}"
   register: existe
 
