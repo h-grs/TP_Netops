@@ -1,7 +1,0 @@
-# CEB_1 — CLIENT 2, site A (Paris) — raccordé à pe1 dans la VRF VRFB
-# Même LAN que cea-1 (192.168.0.0/24) : chevauchement voulu, la VRF les sépare.
-asn: 65003
-tenant: VRFB
-uplink: {nom: Ethernet1, ip: 172.21.0.3/31, pe: pe1}
-lan:    {nom: Ethernet2, ip: 192.168.0.1/24, hote: lc2, hote_ip: 192.168.0.2}
-canary: 10.255.2.1/32

@@ -1,7 +1,0 @@
-# PE1 — Paris : porte les deux tenants (mutualisation, étanchéité par les VRF)
-loopback: 10.0.0.0
-interfaces_coeur:
-  - {nom: Ethernet1, ip: 10.10.0.0/31, vers: p1}
-raccordements:            # liens PE–CE : un /31 unique par liaison (règle dans group_vars/all/network.yml)
-  - {nom: Ethernet2, vrf: VRFA, ip: 172.21.0.0/31, ce: cea-1}
-  - {nom: Ethernet3, vrf: VRFB, ip: 172.21.0.2/31, ce: ceb-1}
