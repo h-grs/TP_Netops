@@ -1,0 +1,20 @@
+{#- MP-BGP VPNv4 : un PE parle au RR ; le RR parle à chaque PE (client du RR) -#}
+{% set voisins = groups['pe'] | map('extract', hostvars, 'loopback') | list if inventory_hostname == rr
+                 else [hostvars[rr].loopback] %}
+router bgp {{ asn_coeur }}
+   router-id {{ loopback }}
+   no bgp default ipv4-unicast
+{% for v in voisins %}
+   neighbor {{ v }} remote-as {{ asn_coeur }}
+   neighbor {{ v }} update-source Loopback0
+{% if inventory_hostname == rr %}
+   neighbor {{ v }} route-reflector-client
+{% endif %}
+   neighbor {{ v }} send-community extended
+{% endfor %}
+   !
+   address-family vpn-ipv4
+{% for v in voisins %}
+      neighbor {{ v }} activate
+{% endfor %}
+!

@@ -70,6 +70,8 @@ make nautobot-up   # démarre Nautobot sur la VM tools
 | `run` | Les 3 playbooks d'affilée |
 | `plan N=pe1` | Diff avec la config réelle, **sans appliquer** |
 | `checkup` | Checkup en 4 barreaux, lecture seule (dont ping des postes) |
+| `render` / `render N=pe1` | J4 : config voulue en texte → `rendu/<nœud>.cfg`, **sans l'appliquer** |
+| `conforme` | J4 : compare chaque rendu à la config réelle (mode check) |
 | `closedness` | Test d'étanchéité entre clients |
 | `cli N=p1` | Ouvre la CLI d'un nœud (le lab doit être up) |
 | `tools-status` | Conteneurs qui tournent sur la VM tools |
@@ -132,6 +134,8 @@ ansible/
   100-checkup_escalier.yml      NE PAS MODIFIER (figé par le tag avant-j4)
   200-canary.yml  200-closed_network.yml   test d'étanchéité
   300-nautobot-sync.yml          inventaire → Nautobot, collection networktocode.nautobot (make nautobot-sync)
+  04-rendu.yml                   J4 : rendu des gabarits (make render / make conforme)
+  templates/eos/                 J4 : gabarits Jinja2, une couche par fichier (coeur, mpbgp, vrf, ce)
   400-sot-pull.yml               Nautobot → sot/host_vars/ (make sot-pull)
   templates/host_vars.yml.j2     gabarit des host_vars régénérés
 ```

@@ -1,0 +1,16 @@
+{#- CE : interface vers le PE, LAN du site, eBGP vers le PE et annonce du LAN -#}
+ip routing
+!
+interface {{ uplink.nom }}
+   no switchport
+   ip address {{ uplink.ip }}
+!
+interface {{ lan.nom }}
+   no switchport
+   ip address {{ lan.ip }}
+!
+router bgp {{ asn }}
+   router-id {{ lan.ip | ansible.utils.ipaddr('address') }}
+   neighbor {{ uplink.ip | ansible.utils.ipaddr('peer') }} remote-as {{ asn_coeur }}
+   network {{ lan.ip | ansible.utils.ipaddr('network/prefix') }}
+!

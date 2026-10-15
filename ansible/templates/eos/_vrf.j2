@@ -1,0 +1,24 @@
+{#- VRF des clients sur un PE : instance, interface vers le CE, RD/RT, eBGP avec le CE -#}
+{% for r in raccordements %}
+vrf instance {{ r.vrf }}
+!
+ip routing vrf {{ r.vrf }}
+!
+interface {{ r.nom }}
+   no switchport
+   vrf {{ r.vrf }}
+   ip address {{ r.ip }}
+!
+{% endfor %}
+router bgp {{ asn_coeur }}
+{% for r in raccordements %}
+   vrf {{ r.vrf }}
+      rd {{ loopback }}:{{ tenants[r.vrf].id }}
+      route-target import vpn-ipv4 {{ tenants[r.vrf].rt }}
+      route-target export vpn-ipv4 {{ tenants[r.vrf].rt }}
+      neighbor {{ r.ip | ansible.utils.ipaddr('peer') }} remote-as {{ hostvars[r.ce].asn }}
+      !
+      address-family ipv4
+         neighbor {{ r.ip | ansible.utils.ipaddr('peer') }} activate
+{% endfor %}
+!

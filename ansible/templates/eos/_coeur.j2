@@ -1,0 +1,27 @@
+{#- Cœur : routage, MPLS, loopback, liens P/PE, OSPF, LDP -#}
+ip routing
+mpls ip
+!
+interface Loopback0
+   ip address {{ loopback }}/32
+   ip ospf area {{ ospf_area }}
+   mpls ldp interface
+!
+{% for i in interfaces_coeur %}
+interface {{ i.nom }}
+   no switchport
+   ip address {{ i.ip }}
+   ip ospf network point-to-point
+   ip ospf area {{ ospf_area }}
+   mpls ldp interface
+!
+{% endfor %}
+router ospf {{ ospf_process }}
+   router-id {{ loopback }}
+!
+mpls ldp
+   router-id {{ loopback }}
+   transport-address interface Loopback0
+   interface disabled default
+   no shutdown
+!

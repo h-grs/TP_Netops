@@ -1,0 +1,43 @@
+# =============================================================================
+#  J4 — La configuration est un artefact : rendue en texte, SANS être appliquée.
+#    make render            → rendu/<nœud>.cfg pour les 9 nœuds Arista
+#    make render N=pe1      → un seul nœud, affiché à l'écran
+#    make conforme          → compare chaque rendu à la config réelle (mode check : rien n'est poussé)
+#  Gabarits : templates/eos/ (une couche par fichier, comme les playbooks de J2)
+#  Données  : sot/host_vars (Nautobot) + group_vars. Le checkup de J2 n'est pas touché.
+# =============================================================================
+- name: "J4 — rendu de la configuration voulue (aucun accès aux équipements)"
+  hosts: p:pe:ce
+  gather_facts: false
+  tags: [rendu]
+  tasks:
+    - name: Dossier rendu/ (ignoré par git)
+      run_once: true
+      delegate_to: localhost
+      ansible.builtin.file: {path: "{{ playbook_dir }}/../rendu", state: directory, mode: "0755"}
+
+    - name: Gabarit + données → rendu/<nœud>.cfg
+      delegate_to: localhost
+      ansible.builtin.template:
+        src: templates/eos/config.j2
+        dest: "{{ playbook_dir }}/../rendu/{{ inventory_hostname }}.cfg"
+        mode: "0644"
+
+- name: "J4 — conformité : la config réelle contient-elle tout le rendu ? (mode check, rien n'est appliqué)"
+  hosts: p:pe:ce
+  gather_facts: false
+  tags: [conforme, never]
+  tasks:
+    - name: Rendu comparé à la running-config
+      arista.eos.eos_config:
+        src: "{{ playbook_dir }}/../rendu/{{ inventory_hostname }}.cfg"
+      check_mode: true
+      diff: true
+      register: ecart
+
+    - name: Verdict
+      ansible.builtin.assert:
+        that: not ecart.changed
+        success_msg: "{{ inventory_hostname }} : conforme au rendu"
+        fail_msg: "{{ inventory_hostname }} : la config réelle diffère du rendu (voir le diff ci-dessus)"
+        quiet: true

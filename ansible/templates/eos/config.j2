@@ -1,0 +1,23 @@
+{#- =============================================================================
+    J4 — Configuration voulue d'un équipement Arista, en texte (format running-config EOS).
+    Une couche = un gabarit, dans l'ordre des playbooks de J2 :
+      _coeur.j2  OSPF + MPLS/LDP           (P, PE)      ↔ 01-coeur.yml
+      _mpbgp.j2  MP-BGP VPNv4, RR          (PE, RR)     ↔ 02-mpbgp.yml
+      _vrf.j2    VRF + eBGP vers les CE    (PE)         ↔ 03-vrf.yml
+      _ce.j2     interfaces + eBGP vers PE (CE)         ↔ 03-vrf.yml
+    Données : sot/host_vars (Nautobot) + group_vars/all/network.yml. Aucune valeur en dur.
+============================================================================= -#}
+! {{ inventory_hostname }} — configuration rendue depuis Nautobot (make render), non appliquée
+!
+{% if 'p' in group_names or 'pe' in group_names %}
+{% include 'eos/_coeur.j2' +%}
+{% endif %}
+{% if 'pe' in group_names or inventory_hostname == rr %}
+{% include 'eos/_mpbgp.j2' +%}
+{% endif %}
+{% if 'pe' in group_names %}
+{% include 'eos/_vrf.j2' +%}
+{% endif %}
+{% if 'ce' in group_names %}
+{% include 'eos/_ce.j2' +%}
+{% endif %}
