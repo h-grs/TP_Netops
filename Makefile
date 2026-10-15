@@ -2,7 +2,9 @@ TOPO := netops.clab.yaml
 CLAB ?= sudo containerlab
 PB   := cd ansible && ansible-playbook     
  
-.PHONY: help deploy destroy inspect deps coeur mpbgp vrf provision checkup cli
+.PHONY: help deploy destroy inspect deps coeur mpbgp vrf run checkup render plan closedness cli
+
+
  
 help:  ## Liste des cibles
 	@grep -E '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -32,8 +34,12 @@ checkup:  ## Playbook 3 : VRF + PE–CE + CE
 render:  ## Rendu d'un gabarit sans appliquer : make render N=pe1 (POUR J4)
 	$(PB) 04-rendu.yml -l $(N)
 
+run:  ## Applique tout (les 3 playbooks d'affilée)
+	$(PB) run.yml
+
 plan:  ## Diff avec la config réelle, sans appliquer : make plan N=pe1
-	$(PB) 00-collections.yml -l $(N) --check --diff
+	@test -n "$(N)" || { echo "Usage : make plan N=pe1"; exit 1; }
+	$(PB) run.yml -l $(N) --check --diff
 
 collections:
 	$(PB) 00-collections.yml
