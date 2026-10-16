@@ -137,9 +137,8 @@ obs-status:  ## État de la chaîne : service gnmic, nœuds exposés, conteneurs
 	@echo "gnmic : $$(systemctl is-active gnmic) — nœuds exposés : $$(curl -s localhost:9804/metrics | grep -o 'device="[^"]*"' | sort -u | wc -l)"
 	@$(SSH) 'cd $(OBS_DIR) && docker compose ps --format "table {{.Service}}\t{{.Status}}\t{{.Image}}"'
 
-trafic:  ## O3 : trafic de test (≈ 58 kbit/s) : make trafic S=lc1 D=192.168.1.2 (Ctrl-C pour arrêter)
-	@test -n "$(S)" -a -n "$(D)" || { echo "Usage : make trafic S=lc1 D=192.168.1.2"; exit 1; }
-	docker exec -it $(S) ping -i 0.2 -s 1400 $(D)
+trafic:  ## O3 : trafic de test ≈ 58 kbit/s, défaut lc2 → lc3 (VRFB, passe par p2 Ethernet2 = make panne) [S=lc1 D=192.168.1.2] (Ctrl-C)
+	docker exec -it $(or $(S),lc2) ping -O -i 0.2 -s 1400 $(or $(D),192.168.1.2)
 
 panne:  ## O3 : coupe une interface (défaut p2 Ethernet2) et affiche l'heure UTC : make panne [N=p2 I=Ethernet2]
 	$(PB) 510-experience-panne.yml -e etat=down $(if $(N),-e noeud=$(N)) $(if $(I),-e interface=$(I))

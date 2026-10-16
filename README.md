@@ -137,7 +137,7 @@ Détails, correspondance avec l'énoncé et contrôles : `ansible/docs/OBSERVABI
 | `o2` | VM Tools : Prometheus (`tools/observabilite/compose.yml`), après test du port 9804 entre les VM |
 | `o3` | VM Tools : Grafana, datasource et tableau de bord provisionnés par fichier (`.env` à créer une fois) |
 | `obs` / `obs-status` | les trois d'affilée / état de la chaîne |
-| `trafic S=lc1 D=192.168.1.2` | trafic de test ≈ 58 kbit/s pour les expériences |
+| `trafic` (`S=lc2 D=192.168.1.2`) | trafic de test ≈ 58 kbit/s, défaut lc2 → lc3 : le flux que coupe `panne` |
 | `panne` / `reprise` (`N=p2 I=Ethernet2`) | coupe / rétablit une interface, heure UTC affichée |
 
 ## Jalons
